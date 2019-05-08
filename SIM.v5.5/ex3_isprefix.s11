@@ -1,0 +1,125 @@
+.=torg + 3000
+main:
+	mov pc, sp
+	tst -(sp)
+	mov #word_word, r0
+	mov #word_prefix, r1
+	mov X, r2
+	jsr pc, isPrefix
+	halt
+
+;r0 - word
+;r1 - prefixTest
+;r2 - X	
+isPrefix:
+	mov r0, -(sp)
+	mov r1, -(sp)
+	mov r2, -(sp)
+	jsr pc, auxIsPrefix
+	tst (sp)+
+	tst (sp)+
+	tst (sp)+
+	mov out_is_prefix, r1
+	rts pc
+auxIsPrefix:
+	tst 2(sp)
+	bmi false_end_aux ;x<0
+	cmpb @4(sp), #'@
+	beq true_end_aux ;prefix = '@
+	cmpb @6(sp), #'@
+	beq aux_f1 ;word = '@
+	cmpb @4(sp), @6(sp)
+	beq aux_f2 ;prefix = word
+	dec 2(sp) ; there is a mistake: x--
+	inc 4(sp) ; try: remove one letter
+	mov 6(sp), -(sp)
+	mov 6(sp), -(sp)
+	mov 6(sp), -(sp)
+	jsr pc, auxIsPrefix
+	tst (sp)+
+	tst (sp)+
+	tst (sp)+
+	cmp out_is_prefix, #1
+	beq true_end_aux
+	dec 4(sp)
+	inc 6(sp) ; try: add one letter
+	mov 6(sp), -(sp)
+	mov 6(sp), -(sp)
+	mov 6(sp), -(sp)
+	jsr pc, auxIsPrefix
+	tst (sp)+
+	tst (sp)+
+	tst (sp)+
+	cmp out_is_prefix, #1
+	beq true_end_aux
+	inc 4(sp) ; try: swap 
+	mov 6(sp), -(sp)
+	mov 6(sp), -(sp)
+	mov 6(sp), -(sp)
+	jsr pc, auxIsPrefix
+	tst (sp)+
+	tst (sp)+
+	tst (sp)+
+	cmp out_is_prefix, #1
+	beq true_end_aux
+	; nothing works! return false
+false_end_aux:
+	mov #0, out_is_prefix
+	rts pc
+true_end_aux:
+	mov #1, out_is_prefix
+	rts pc
+aux_f1:
+	dec 2(sp)
+	inc 4(sp)
+	mov 6(sp), -(sp)
+	mov 6(sp), -(sp)
+	mov 6(sp), -(sp)
+	jsr pc, auxIsPrefix
+	tst (sp)+
+	tst (sp)+
+	tst (sp)+
+	cmp out_is_prefix, #1
+	beq true_end_aux
+	rts pc
+aux_f2:
+	inc 4(sp)
+	inc 6(sp)
+	; advanced the letters of both words
+	mov 6(sp), -(sp)
+	mov 6(sp), -(sp)
+	mov 6(sp), -(sp)
+	jsr pc, auxIsPrefix
+	tst (sp)+
+	tst (sp)+
+	tst (sp)+
+	cmp out_is_prefix, #1
+	beq true_end_aux
+	rts pc	
+
+.=torg+5000 
+out_is_prefix: .word 0
+
+
+.= torg + 12000
+Setmin: .byte 'A
+Setmax: .byte 'C
+Delim: .byte ' ;this is a space
+.even
+Dict: .word word1, word2, word3, word4
+DictLen: .word 4
+Sent: .ascii <AB@>
+.even
+X: .word 7
+MaxLen: .word 6
+word1: .ascii <AC@>
+word2: .ascii <B@>
+word3: .ascii <C@>
+word4: .ascii <@>
+
+word_word: .ascii <hellohellohellohello@>
+word_prefix: .ascii <hellohllohell1111ohdllo8@> 
+.even
+
+Output: .blkw 40
+.even

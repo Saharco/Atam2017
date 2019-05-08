@@ -1,0 +1,297 @@
+. = torg + 5000
+main:	mov pc, sp
+		tst -(sp)
+		mov #Sent, r0 
+		mov #Output, r1
+		mov X, r2
+		mov MaxLen, r3
+		mov r3, r4
+		cmp #0, r3
+		beq is_valid_output ; this is an empty sentence
+try_first_dict_sent: movb Setmin, (r1)+
+		sob r3, try_first_dict_sent
+		mov r4, r3
+		movb #'@, (r1)
+		mov #Output, r1
+is_valid_output:	jsr pc, isPrefix
+		cmp r1, #0
+		beq try_next_word
+		tst -(sp)
+		mov #Dict, -(sp)
+		mov DictLen, -(sp)
+		mov Delim, -(sp)
+		mov #Output, -(sp)
+		jsr pc, sentInDict
+		tst (sp)+
+		tst (sp)+
+		tst (sp)+
+		tst (sp)+
+		cmp (sp)+, #1
+		beq completed
+try_next_word:	mov #Output, r1
+		mov r1, -(sp)
+		mov r3, -(sp)
+		jsr pc, nextString
+		tst (sp)+
+		tst (sp)+
+		mov r3, length
+		tst -(sp)
+		jsr r5, isStart
+length:		.word 0
+		.word Output
+		tst (sp)+
+		beq is_valid_output
+		mov #Output, r1
+		dec r3 ; Couldn't find a suitable completion. Trying a smaller sentence...
+		blt completed
+		mov r3, r4
+		br try_first_dict_sent
+completed:	halt
+		
+
+
+;r0 - word
+;r1 - prefixTest
+;r2 - X	
+isPrefix:		
+		mov r0, -(sp)
+		mov r1, -(sp)
+		mov r2, -(sp)
+		jsr pc, auxIsPrefix
+		tst (sp)+
+		tst (sp)+
+		tst (sp)+
+		mov out_is_prefix, r1
+		rts pc
+auxIsPrefix:	tst 2(sp)
+		bmi false_end_aux ;x<0
+		cmpb @4(sp), #'@
+		beq true_end_aux ;prefix = '@
+		cmpb @6(sp), #'@
+		beq aux_f1 ;word = '@
+		cmpb @4(sp), @6(sp)
+		beq aux_f2 ;prefix = word
+		dec 2(sp) ; there is a mistake: x--
+		inc 4(sp) ; try: remove one letter
+		mov 6(sp), -(sp)
+		mov 6(sp), -(sp)
+		mov 6(sp), -(sp)
+		jsr pc, auxIsPrefix
+		tst (sp)+
+		tst (sp)+
+		tst (sp)+
+		cmp out_is_prefix, #1
+		beq true_end_aux
+		dec 4(sp)
+		inc 6(sp) ; try: add one letter
+		mov 6(sp), -(sp)
+		mov 6(sp), -(sp)
+		mov 6(sp), -(sp)
+		jsr pc, auxIsPrefix
+		tst (sp)+
+		tst (sp)+
+		tst (sp)+
+		cmp out_is_prefix, #1
+		beq true_end_aux
+		inc 4(sp) ; try: swap 
+		mov 6(sp), -(sp)
+		mov 6(sp), -(sp)
+		mov 6(sp), -(sp)
+		jsr pc, auxIsPrefix
+		tst (sp)+
+		tst (sp)+
+		tst (sp)+
+		cmp out_is_prefix, #1
+		beq true_end_aux
+		; nothing works! return false
+false_end_aux:	mov #0, out_is_prefix
+		rts pc
+true_end_aux:	mov #1, out_is_prefix
+		rts pc
+aux_f1:		dec 2(sp)
+		inc 4(sp)
+		mov 6(sp), -(sp)
+		mov 6(sp), -(sp)
+		mov 6(sp), -(sp)
+		jsr pc, auxIsPrefix
+		tst (sp)+
+		tst (sp)+
+		tst (sp)+
+		cmp out_is_prefix, #1
+		beq true_end_aux
+		rts pc
+aux_f2:		inc 4(sp)
+		inc 6(sp)
+		; advanced the letters of both words
+		mov 6(sp), -(sp)
+		mov 6(sp), -(sp)
+		mov 6(sp), -(sp)
+		jsr pc, auxIsPrefix
+		tst (sp)+
+		tst (sp)+
+		tst (sp)+
+		cmp out_is_prefix, #1
+		beq true_end_aux
+		rts pc	
+
+;1st inline parameter: length of the string
+;2nd inline parameter: address of the first character in the string
+isStart:
+		mov (r5)+ , f2_len
+		mov (r5)+ , strp
+		mov r4 , -(sp)
+		mov strp , r4 ;r4 holds the address of the first character in the string
+loop_is_start:	tst f2_len
+		bne check_char
+		mov (sp)+ , r4
+		mov #1 , 2(sp)
+		rts r5
+check_char:	dec f2_len
+		cmpb (r4)+ , Setmin
+		beq loop_is_start
+		mov (sp)+ , r4
+		mov #0 , 2(sp)
+		rts r5
+	
+	
+
+nextString:
+		mov 2(sp) , next_length
+		mov r4 , -(sp)
+		mov 6(sp) , r4      
+		add next_length , r4
+check_last:	cmpb -(r4) , Setmax
+		bne end1_next_string
+		movb Delim , (r4)
+		dec next_length
+		bne check_last
+end1_next_string:	tst next_length
+		beq end3_next_string
+		cmpb (r4), Delim
+		beq end2_next_string
+		incb (r4)
+end3_next_string:	mov (sp)+ , r4
+		rts pc
+end2_next_string:	movb Setmin , (r4)
+		br end3_next_string
+
+
+
+wordsEqual:
+		mov r1, -(sp)
+		mov r2, -(sp)
+		mov 6(sp), r2 ;word2
+		mov 10(sp), r1 ;word1
+words1_equal:	cmpb (r1)+, (r2)+
+		beq words2_equal
+		br words3_equal
+words2_equal:	cmpb -(r1), #'@
+		beq words4_equal
+		tstb (r1)+
+		br words1_equal
+words3_equal:	mov (sp)+, r2
+		mov (sp)+, r1
+		mov #0, 6(sp)
+		rts pc ;failure!
+words4_equal:	mov (sp)+, r2
+		mov (sp)+, r1
+		mov #1, 6(sp)
+		rts pc ;success!
+
+
+	
+sentInDict:
+		mov r0, -(sp) ; we use this register
+		mov r1, -(sp) ; we use this register
+		mov r2, -(sp) ; we use this register
+		mov r3, -(sp) ; we use this register
+		mov r4, -(sp) ; we use this register
+		mov r5, -(sp) ; we use this register
+		mov 16(sp), r0 ; r0 = sent
+		mov 24(sp), r1; r1=dict
+		mov #0, r2 ; r2 = length of the current word
+		mov 22(sp), r3 ;r3 = length of the dict array
+		mov #0, r4 ; r4 is 1 iff we've reached the last word in the sentence
+		movb 20(sp), r5
+		cmpb (r0), r5
+		bne word_loop
+del_loop:		cmpb (r0)+, r5
+		beq del_loop
+		tstb -(r0)
+check_end:	cmpb (r0), #'@
+		beq sent_is_in ; success!
+word_loop:	cmpb (r0), #'@
+		beq last_word
+		inc r0
+		inc r2
+		cmpb (r0), r5
+		bne word_loop
+		movb #'@, (r0) ; replace the delimeter with the string terminator
+		br check_word
+last_word:	mov #1, r4 ; we've reached the last word in the sentence
+check_word: 	sub r2, r0 ; go back to the start of the last word
+		tst -(sp)
+		mov r0, -(sp)
+check_dict_word:	mov (r1)+, -(sp)
+					jsr pc, wordsEqual
+					tst(sp)+
+					cmp 2(sp), #1
+					beq sent_next_word ; we found a match!
+					sob r3, check_dict_word ; no match: check the next word
+					add r2, r0 ; move back to the following word in the sentence
+					cmp r4, #1
+					beq end_of_sent
+					movb r5, (r0)
+end_of_sent:	tst (sp)+
+		tst (sp)+
+		br end_sent_in_dict
+sent_next_word:	add r2, r0; move back to the following word in the sentence
+		cmp r4, #1
+		beq go_next_word
+		movb r5, (r0)
+go_next_word:	mov 16(sp), r1
+		mov 22(sp), r3
+		mov #0, r2
+		cmp r4, #1
+		beq sent_is_in
+sent_is_in:	mov #1, 26(sp)
+end_sent_in_dict:	mov (sp)+, r5
+		mov (sp)+, r4
+		mov (sp)+, r3
+		mov (sp)+, r2
+		mov (sp)+, r1
+		mov (sp)+, r0
+		rts pc
+
+
+.=torg+10000 
+out_is_prefix: .word 0
+equal_result: .word 0
+strp: .word 0
+f2_len: .word 0
+next_length: .word 0
+
+.= torg + 12000
+Setmin: .byte 'A
+Setmax: .byte 'C
+Delim: .byte ' ;this is a space
+.even
+Dict: .word word1, word2, word3, word4
+DictLen: .word 4
+Sent: .ascii <AB@>
+.even
+X: .word 4
+MaxLen: .word 6
+word1: .ascii <AC@>
+word2: .ascii <B@>
+word3: .ascii <C@>
+word4: .ascii <@>
+.even
+
+Output: .blkw 40
+.even
+
+
+-------------------------------------------------------------------------------------
+
+

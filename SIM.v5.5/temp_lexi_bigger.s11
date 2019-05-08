@@ -1,0 +1,44 @@
+. = torg + 5000
+main:				
+					mov pc, sp
+					tst -(sp)
+					mov #word1, -(sp)
+					mov #word2, -(sp)
+					jsr pc, isLexiBigger
+					tst (sp)+
+					tst (sp)+
+					tst (sp)+
+					halt
+					
+		
+		
+		
+isLexiBigger:
+					mov r0, -(sp)
+					mov r1, -(sp)
+					mov 10(sp), r0				; the address of the first string entered to the stack is stored in r0
+					mov 6(sp), r1				; the address of the second string entered to the stack is stored in r1
+					clr 12(sp)
+loop_lexi:			cmpb (r0), #'@
+					beq end_lexi					; if our first string reached its end - it's not bigger than the second string. Go to the end
+					cmpb (r1), #'@
+					beq end_lexi-4				; if our first string hasn't reached its end and the second one did - return 1, and then end
+					cmpb (r0), (r1)
+					bgt end_lexi-4				; if r1[current] > r2[current] - it's bigger than the seccond string, so return 1 and then end
+					cmpb (r0)+, (r1)+			
+					blt end_lexi					; if r1[current] < r2[current] - it's not bigger than the second string. Go to the end
+					br loop_lexi				; the characters are equal - check the next ones
+					inc 12(sp)					; the first string delivered to the stack is bigger - return 1
+end_lexi:			mov (sp)+, r1
+					mov (sp)+, r0
+					rts pc
+
+					
+					
+					
+					
+	
+	
+. = torg + 6000
+word1:				.ascii <HelloWorld@>
+word2:				.ascii <HelloDog@>

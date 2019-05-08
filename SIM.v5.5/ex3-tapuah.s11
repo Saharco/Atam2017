@@ -1,0 +1,75 @@
+. = torg + 3000
+main:
+	mov pc , sp
+	tst -(sp)
+	jsr r5 , isStart
+	.word 6
+	.word word1
+	mov #word1 , -(sp)
+	mov length , -(sp)
+	jsr pc , nextString
+	tst (sp)+
+	tst (sp)+
+	halt
+	
+	
+isStart:
+	mov (r5)+ , f2_len
+	mov (r5)+ , strp
+	mov r4 , -(sp)
+	mov strp , r4 
+loop_is_start:
+	tst f2_len
+	bne check_char
+	mov (sp)+ , r4
+	tst (sp)+
+	mov #1 , -(sp)
+	rts r5
+check_char:
+	dec f2_len
+	cmpb (r4)+ , Setmin
+	beq loop_is_start
+	mov (sp)+ , r4
+	tst (sp)+
+	mov #0 , -(sp)
+	rts r5
+	
+	
+
+nextString:
+	mov 2(sp) , length
+	mov r4 , -(sp)
+	mov 6(sp) , r4      
+	add length , r4
+check_last:
+	cmpb -(r4) , Setmax
+	bne end1_next_string
+	movb Delim , (r4)
+	dec length
+	bne check_last
+end1_next_string:
+	tst length
+	beq end3_next_string
+	cmpb (r4), Delim
+	beq end2_next_string
+	incb (r4)
+end3_next_string:
+	mov (sp)+ , r4
+	rts pc
+end2_next_string:
+	movb Setmin , (r4)
+	br end3_next_string
+	
+	
+.=torg+10000
+word1: .ascii <zzzzzz@>
+.even
+strp: .word 0
+f2_len: .word 0
+length: .word 6
+Setmin: .ascii <a>
+.even
+Setmax: .ascii <z>
+.even
+Delim: .ascii < >
+	

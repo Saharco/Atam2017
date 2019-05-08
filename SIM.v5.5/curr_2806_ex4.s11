@@ -1,0 +1,780 @@
+; Each definition here represents the known address of an apparatus for the interrupts' usage
+TKS = 177560
+TKB = 177562
+TPS = 177564
+TPB = 177566
+CLS = 177546
+IV_KEYBOARD = 60
+IV_PRINTER = 64
+IV_CLOCK = 100
+
+
+. = torg + 3400
+main:				
+					mov pc, sp
+					tst -(sp) 						; initializing the stack pointer to its start (stack size is 5000 in octal)
+					mov #Dict, -(sp)					; push the dictionary's address into the stack
+					mov #dict_len, -(sp)				; push the address where the dictionary's length will be stored into the stack
+					jsr pc, dictCalcLen				; enter the dictCalcLen subroutine to calculate the dictionary's size (and store it in the given address)
+					tst (sp)+						; pop the length's address from the stack
+					tst (sp)+						; pop the dictionary's address from the stack
+					mov #msg_scan, @#IV_KEYBOARD		; defining the interrupt routine that will be put to use by the keyboard 
+					mov #200, @#IV_KEYBOARD+2		; defining the priority of the keyboard interrupt (=4)
+					;mov #msg_scan, @#IV_PRINTER	; defining the interrupt routine that will be put to use by the printer 
+					;mov #200, @#IV_PRINTER+2		; defining the priority of the printer interrupt (=4)
+					mov #clock, @#IV_CLOCK			; defining the interrupt routine that will be put to use by the clock 
+					mov #300, @#IV_CLOCK+2			; defining the priority of the clock interrupt (=6)
+					jsr pc, startGame				; enter the startGame subroutine to print the starting messages and receive the user input
+					mov @#rate, r5					; r5 holds the current amount of ticks left for this second to pass
+					mov #100, @#CLS					; enable the clock apparatus to carry out interruptions
+					jsr pc, scanEnable
+					mov #101, @#TKS					; enable the keyboard apparatus to carry out interruptions
+wait_sort:			
+					tst @#dict_len
+					beq check_time					; if the dictionary's EMPTY - do not sort it (does not make sense!). Instead, skip to check_time
+;					mov @#dict_len, r2				; move the dictionary's length to r2
+;					mov #Dict, -(sp)					; push the dictionary's address into the stack
+;					jsr pc, RevBubble				; it's sorting time!
+;					tst (sp)+						; pop the dictionary's address from the stack
+check_time:			tst @#msg_time					; if the user is not out of time yet (msg_time > 0) - keep sorting 
+					bne check_amount				; the user is not out of time yet - go back to wait_sort
+					;jsr pc, timesUp
+					br end_prog
+check_amount:		tst @#msg_length
+					bne wait_sort ; CHANGE TO CHECK_DOT
+					;jsr pc, fullMessage
+					br end_prog
+check_dot:			;TODO
+end_prog:			halt
+					.word 0							; placeholder word with the same op_code as halt (just in case!)
+					
+
+; parameters: none.
+; return value: none.
+; prints the game's first display messages, and gets the input from the user for the game's duration and message's length
+; lnking register is pc
+startGame:
+					mov #len_msg_str, -(sp)			; push the address of this message to the stack
+					jsr pc, printSentence				; enter the printSentence subroutine to print the sentence that was delivered in the stack
+					tst (sp)+						; pop the address of the message from the stack
+					jsr pc, endLine					; enter the endLine subroutine in order to move to the next line
+					mov #msg_length, -(sp)			; push the address of the length of the message to the stack (its default value is 0)
+					jsr pc, readInput				; enter the readInput subroutine in order for the user to enter the value for the message's length
+					tst (sp)+						; pop the address of the message length from the stack
+					
+					mov #secs_msg_str, -(sp)			; push the address of this message to the stack
+					jsr pc, printSentence				; enter the printSentence subroutine to print the sentence that was delivered in the stack
+					tst (sp)+						; pop the address of the message from the stack
+					jsr pc, endLine					; enter the endLine subroutine in order to move to the next line
+					mov #msg_time, -(sp)				; push the address of the total time for the message to the stack (its default value is 0)
+					jsr pc, readInput				; enter the readInput subroutine in order for the user to enter the value for the total time of the message
+					tst (sp)+						; pop the address of the time for the message from the stack
+					
+					mov #start1_msg_str, -(sp)		; push the address of this message to the stack
+					jsr pc, printSentence				; enter the printSentence subroutine to print the sentence that was delivered in the stack
+					tst (sp)+						; pop the address of the message from the stack
+					jsr pc, endLine					; enter the endLine subroutine in order to move to the next line
+					mov #start2_msg_str, -(sp)		; push the address of this message to the stack
+					jsr pc, printSentence				; enter the printSentence subroutine to print the sentence that was delivered in the stack
+					tst (sp)+						; pop the address of the message from the stack
+					jsr pc, endLine					; enter the endLine subroutine in order to move to the next line
+					jsr pc, endLine					; enter the endLine subroutine in order to move to the next line
+					rts pc
+
+		
+; parameters:
+; address of the string to be printed in the stack
+; prints the sentence and then goes down to a new line (busy_wait)
+; return value: none
+; lniking register is pc
+printSentence:	
+					mov r0, -(sp)					; we use this register: push the current value of r0 to the stack
+					mov 4(sp), r0;					; move the address of the message string to r0
+lp_len_msg:			cmpb (r0), #'@
+					beq end_len_msg					; if r0 reached the terminator '@ - printing ends
+					movb (r0)+, -(sp)				; push the current char in r0 into the stack and advance it to the next letter
+					jsr pc, putChar					; enter the putChar subroutine to print the character in the stack
+					tst (sp)+						; pop the character from the stack
+					br lp_len_msg					; loop: print the next letter
+end_len_msg:			tstb @#TPS
+					bpl end_len_msg					; if "ready" bit is not set: wait for the last character to be printed
+					mov (sp)+, r0					; pop r0's previous value from the stack, and restore it
+					rts pc
+					
+					
+; parameters:
+; ascii value of the desired character to be printed
+; waits for the printer to stop being occupied (busy_wait), and then sends the character to TPB
+; return value: none.
+; linking register is pc
+putChar:
+					tstb @#TPS
+					bpl .-4							; if "ready" bit is not set: wait for the last character to be printed
+					movb 2(sp), @#TPB				; send the character to the printer buffer, and advance r0 to the next character
+					rts pc
+
+					
+; parameters: none.
+; return value: none.
+; prints a new line.
+; linking register is pc
+endLine:				
+					mov r0, -(sp)					; we use this register: push the current value of r0 to the stack
+					movb @#LF, -(sp)				; push the ascii value for Line Feed into the stack
+					jsr pc, putChar					; enter the putChar subroutine the print 'LF
+					tst (sp)+						; pop the letter from the stack
+					movb @#CR, -(sp)				; push the ascii value for Carriage Return into the stack
+					jsr pc, putChar					; enter the putChar subroutine the print 'CR
+					tst (sp)+						; pop the letter from the stack
+					tstb @#TPS
+					bpl .-4							; if "ready" bit is not set: wait for the last character to be printed
+					mov (sp)+, r0					; pop r0's previous value from the stack, and restore it
+					rts pc
+					
+
+
+scanEnable:
+					movb @#user_write, -(sp)			; push the ascii value of the input to the stack
+					jsr pc, putChar					; enter the putChar subroutine to print the letter in the stack
+					tst (sp)+						; pop the ascii value from the stack
+					movb @#space, -(sp)				; push the ascii value of the input to the stack
+					jsr pc, putChar					; enter the putChar subroutine to print the letter in the stack
+					tst (sp)+						; pop the ascii value from the stack
+					rts pc
+
+
+					
+; parameters:
+; the address of the field that the user is assigning value to
+; requires to enter the value for the requested field. Note: field is a number
+; return: none.
+; linking register is pc
+readInput:
+					mov r0, -(sp)					; we use this register: push the current value of r0 to the stack
+					mov r1, -(sp)					; we use this register: push the current value of r1 to the stack
+					mov r2, -(sp)					; we use this register: push the current value of r2 to the stack
+					mov 10(sp), r1					; move the address of the result into r1
+					jsr pc, scanEnable
+					clr r2							; clear r2: the input's default size is 0
+loop_digits:		mov #1, @#TKS					; activate Read Enable for the keyboard apparatus
+					tstb @#TKS
+					bpl .-4							; there is no input: go back and wait for input
+					movb @#TKB, r0					; move the input character into r0
+					bic #177600, r0					; clear the irrelevant bits in r0 (ascii value is 7 bits, we assume success for input)
+					tst r2
+					bne legal_print					; if r2 is not 0 - it's legal to print anything (including backspace)
+					cmpb r0, @#backspace
+					beq loop_digits					; if r2 is 0 and backspace was entered: do not print the backspace! ignore and get the next letter
+legal_print:			movb r0, -(sp)					; move the ascii value of the input to the stack
+					jsr pc, putChar					; enter the putChar subroutine to print the letter in the stack
+					tst (sp)+						; pop the ascii value from the stack
+					cmpb r0, @#CR
+					beq end_read_input				; if endline (<ENTER>) was entered: finish
+					cmpb r0, @#backspace
+					bne add_digit					; if backspace was entered: commence the deletion of the previously entered letter
+					jsr pc, removeLastLetter			; enter the removeLastLetter subroutine to remove the previous letter
+					asr (r1)
+					asr (r1)
+					asr (r1)						; remove the last digit from the composed number so far (e.g.: 24 to 2)
+					dec r2							; increase the length of the input number thus far
+					br loop_digits					; get the next letter
+add_digit:			; we assume that any letter other than backspace or enter is a valid digit!!
+					bic #170, r0					; clear irrelevant bits: char to integer!
+					asl (r1)
+					asl (r1)
+					asl (r1)						; move this value to its next power (e.g.: 2 to 20)
+					add r0, (r1)					; add the received value to the number gathered so far
+					inc r2							; increase the length of the input number thus far
+					br loop_digits					; get the next letter
+end_read_input:		mov (sp)+, r2					; pop r2's previous value from the stack, and restore it
+					mov (sp)+, r1					; pop r1's previous value from the stack, and restore it
+					mov (sp)+, r0					; pop r0's previous value from the stack, and restore it
+					jsr pc, endLine					; enter the endLine subroutine in order to move to the next line
+					jsr pc, endLine					; enter the endLine subroutine in order to move to the next line
+					rts pc
+
+					
+; parameters: none.
+; return value: none.
+; removes the last letter printed (note: a backspace was already printed prior to entering this subroutine)					
+removeLastLetter:
+					movb @#space, -(sp)				; push the ascii value for an empty space into the stack
+					jsr pc, putChar					; enter the putChar subroutine to print the letter in the stack
+					tst (sp)+						; pop the letter from the stack
+					movb @#backspace, -(sp)			; push the ascii value for a backspace into the stack	
+					jsr pc, putChar					; enter the putChar subroutine to print the letter in the stack
+					tst (sp)+						; pop the letter from the stack
+					rts pc
+					
+
+					
+;INFINITE-LOOP!				
+flickerPrint:
+loop_boop:			tstb @#TPS
+					bpl loop_boop					; if "ready" bit is not set: jump back and check again until it's ready
+					movb 2(sp), -(sp)				; push the letter that was sent to this function into the stack to be printed
+					jsr pc, putChar					; enter the putChar subroutine to print the letter in the stack
+					tst (sp)+						; pop the letter from the stack
+					jsr pc, removeLastLetter			; enter the removeLastLetter subroutine to remove the previous letter
+					movb @#backspace, -(sp)			; push backspace into the stack to be printed
+					jsr pc, putChar					; enter the putChar subroutine to print the letter in the stack
+					tst (sp)+						; pop the letter from the stack
+					br loop_boop					; CHANGE THIS!!!
+					rts pc
+				
+				
+clock:
+					tst r5							; r5 holds the amount of ticks left for this second throughout the program!
+					bne tick_ok						; if there are more than 0 ticks left for this second - go to tick_ok
+					mov @#rate, r5					; re-apply r5 with the clock's ticking rate
+					dec @#msg_time					; decrement one second from the total time
+					;movb #'t, -(sp) 	;temp
+					;jsr pc, putChar		;temp
+					;tst(sp)+			;temp
+					br .+2							; skip the next instruction, and go to the end!
+tick_ok:				dec r5							; decrement one tick from r5
+					rti
+					
+
+; parameters:
+; address of the list's first node in the stack,
+; address of the dictionary's size in the stack
+; calculutes the dictionary's size, and stores that value in the given address
+; return value: none.
+; linking register is pc
+dictCalcLen:
+					mov r0, -(sp)					; we use this register: push the current value of r0 to the stack
+					mov 6(sp), r0					; move the dictionary's first node's address to r0
+lp_all_nodes:		cmpb @(r0), 0
+					beq dict_end						; if the string's value is 0 (empty word) - end here
+					cmpb @(r0), #'@
+					beq dict_end						; if the string's value is '@ (terminator) - end here
+					inc @4(sp)						; it's a valid node: increment the dict's length
+					cmpb @(r0), 0					
+					beq dict_end						; if the address of the next node is 0 (NIL) - end here
+					cmpb @(r0), #'@
+					beq dict_end						; if the address of the next node is '@ (terminator) - end here.
+					mov 2(r0), r0					; move the value in the address of r0 to r0: r0 now holds the address of the next node
+					br lp_all_nodes					; loop back with the next node's address in r0
+dict_end:			mov (sp)+, r0					; pop r0's previous value from the stack, and restore it
+					rts pc
+
+
+; when we enter this subroutine:	r3 is modifiable,
+;									r2 holds the size of the dictionary
+;									the address of the dictionary is in the stack
+; return value: none.
+; the subroutine sorts the dictionary, assuming there might be one un-sorted member at its end
+; linking register is pc
+RevBubble:
+					mov 2(sp), r3					; mov the current node's address to r3
+					tst @#flag_first_node
+					bne next_node					; if the current node is not the first node - keep going through the list
+					inc @#flag_first_node				; this is the first node: activate the flag
+					mov r3, -(sp)					; push the node to the stack (so we can utilize its address later)
+					br recursion						; skip to the recursion with the first node already in the stackk
+next_node:			dec r2							; r2 holds the size of the dictionary on our first entry
+					beq bubble						; if r2 is 0 - we've reached the last node in the list (except maybe the newly added one): go to bubble
+					mov 2(r3), -(sp)				; push the next node to the stack
+recursion:			jsr pc, RevBubble				; recursive entry to the subroutine: keep going through the nodes until we've reached the desired stop
+					mov (sp)+, r3					; pop the node from the stack, and assign it to r3!
+bubble:				clr @#flag_first_node				; clear the flag (for later usage)
+					tst -(sp)						; save a spot in the stack for the result from the isLexiBigger subroutine
+					mov (r3), -(sp)					; push the current node's string to the stack
+					mov @2(r3), -(sp)				; push the next node's string to the stack
+					jsr pc, isLexiBigger				; enter the isLexiBigger subroutine, to determine whether or not the first string entered to the stack is lexicoraphically bigger
+					tst (sp)+						; pop the second string from the stack
+					tst (sp)+						; pop the first string from the stack
+					tst (sp)+						; pop the result of the subroutine from the stack, and change the PSW flags accordingly
+					beq sorted						; if the result is 0: the dictionary is sorted! go to sorted
+					; the list is not sorted! we'll swap the two strings (of the current node and the next one)
+					mov 2(r3), -(sp)				; move the next node's address to the stack
+					mov r3, -(sp)					; move the current node's address to the stack
+					jsr pc, swapAddress				; enter the swapAddress subroutine, in order to swap the addresses of the nodes' strings
+					tst (sp)+						; pop the string from the stack
+					tst (sp)+						; pop the string from the stack
+sorted:				rts pc
+					
+		
+
+; parameters:
+; result address
+; first string in the stack,
+; second string in the stack
+; return value: returns 1 if the first string is lexicoraphically bigger than the second string, and 0 otherwise.
+; result is stored in the result address pushed to the stack.
+; linking register is pc
+isLexiBigger:
+					mov r0, -(sp)				; we use this register: push the current value of r0 to the stack
+					mov r1, -(sp)				; we use this register: push the current value of r1 to the stack
+					mov 10(sp), r0				; the address of the first string entered to the stack is stored in r0
+					mov 6(sp), r1				; the address of the second string entered to the stack is stored in r1
+					clr 12(sp)
+loop_lexi:			cmpb (r0), #'@
+					beq end_lexi					; if our first string reached its end - it's not bigger than the second string. Go to the end
+					cmpb (r1), #'@
+					beq end_lexi-4				; if our first string hasn't reached its end and the second one did - return 1, and then end
+					cmpb (r0), (r1)
+					bgt end_lexi-4				; if (r1[current] > r2[current]) - the first string is bigger than the seccond string, so return 1 and then end
+					cmpb (r0)+, (r1)+			
+					blt end_lexi					; if (r1[current] < r2[current]) - the first string is not bigger than the second string. Go to the end
+					br loop_lexi				; the characters are equal! Check the next ones
+					inc 12(sp)					; the first string delivered to the stack is bigger - return 1
+end_lexi:			mov (sp)+, r1				; pop r1's previous value from the stack, and restore it
+					mov (sp)+, r0				; pop r0's previous value from the stack, and restore it
+					rts pc		
+		
+
+
+; parameters:
+; first node address in the stack,
+; second node address in the stack
+; return value: none.
+; swaps the strings' fields in the nodes
+; linking register is pc
+swapAddress:
+					mov r0, -(sp)
+					mov r1, -(sp)
+					mov @6(sp), r0
+					mov @10(sp), r1
+					mov r1, @6(sp)
+					mov r0, @10(sp)
+					mov (sp)+, r1
+					mov (sp)+, r0
+					rts pc
+					
+					
+
+					
+;r0: current char
+;r1: address of last entered char
+msg_scan:
+					mov r0, -(sp)
+					mov r1, -(sp)				; we use this register: push the current value of r1 to the stack
+					mov #curr_char_add, r1
+					movb @#TKB, r0 
+					bic #177600, r0				; clear the irrelevant bits in r0 (ascii value is 7 bits, we assume success for input)
+					cmpb r0, @#backspace
+					bne chk_space
+					cmp (r1), #curr_word
+					beq end_scan
+chk_space:			cmpb r0, @#space
+					bne chk_exc_mark
+					; DO SPACE STUFF!!!!
+					movb #'@, @(r1)
+					jsr pc, addToDict
+					br end_scan+6
+					
+chk_exc_mark:		cmpb r0, @#exc_mark
+					bne valid_scan
+					; DO EXC MARK STUFF!!!!
+valid_scan:			movb r0, -(sp)
+					jsr pc, putChar
+					tst (sp)+
+					cmpb r0, @#backspace
+					bne add_char ; we need more conditions!
+					jsr pc, removeLastLetter
+					movb #0, @(r1)
+					dec (r1)
+					br end_scan
+add_char:			movb r0, @(r1)
+					inc (r1)
+end_scan:			mov #101, @#TKS
+					mov (sp)+, r1
+					mov (sp)+, r0
+					rti
+					
+					
+suggestWords:
+					mov r0, -(sp)
+					mov r1, -(sp)
+					mov r2, -(sp)
+					;mov #
+					
+					
+					tst -(sp)
+					jsr pc, isPrefix
+					tst (sp)+
+					;bne (success)
+					
+					
+					mov (sp)+, r2
+					mov (sp)+, r1
+					mov (sp)+, r0
+					rts pc
+		
+		
+		
+concat:
+					mov r0, -(sp)
+					mov r1, -(sp)
+					mov #curr_word, r0
+					mov #curr_msg_char_add, r1
+					cmp #message, (r1)
+					beq loop_concat
+					movb @#space, @(r1)
+					inc (r1)
+loop_concat:		cmpb (r0), #'@
+					beq concat_end
+					movb (r0)+, @(r1)
+					inc (r1)
+					br loop_concat
+concat_end:			movb #'@, @(r1)
+					mov (sp)+, r1
+					mov (sp)+, r0
+					rts pc
+					
+	
+	
+addToDict:
+					mov r0, -(sp)
+					jsr pc, endLine
+					mov #curr_word, r0
+					mov #Dict, -(sp)
+					mov r0, -(sp)
+					jsr pc, insertToList
+					tst (sp)+
+					tst (sp)+
+					jsr pc, concat
+					mov #'', -(sp)
+					jsr pc, putChar
+					tst (sp)+
+					mov r0, -(sp)
+					jsr pc, printSentence
+					tst (sp)+
+					mov #add_msg_str, -(sp)
+					jsr pc, printSentence
+					tst (sp)+
+					jsr pc, endLine
+					jsr pc, msgPrint
+					clr (r0)+
+					clr (r0)+
+					clr (r0)+
+					clr (r0)+
+					clr (r0)+
+					clr (r0)+
+					mov #curr_word, curr_char_add
+					mov (sp)+, r0
+					dec @#msg_length
+					beq end_add
+					jsr pc, scanEnable
+					mov #101, @#TKS
+end_add:				rts pc
+		
+	
+insertToList:
+					mov r0, -(sp)
+					mov r1, -(sp)
+					mov r2, -(sp)
+					mov 10(sp), r0
+					mov 12(sp), r1
+loop_nodes:			cmpb @(r1), 0
+					beq loop_fill_node-2
+					cmpb @(r1), #'@
+					beq loop_fill_node-2
+					mov 2(r1), r1
+					br loop_nodes
+					mov (r1), r2
+loop_fill_node:		cmpb (r0), #'@
+					beq done_insert
+					movb (r0)+, (r2)+
+					br loop_fill_node
+done_insert:			movb #'@, (r2)
+					mov (sp)+, r2
+					mov (sp)+, r1
+					mov (sp)+, r0
+					rts pc
+	
+	
+	
+msgPrint:
+					mov #show1_msg_str, -(sp)
+					jsr pc, printSentence
+					tst (sp)+
+					mov #message, -(sp)
+					jsr pc, printSentence
+					tst (sp)+
+					mov #show2_msg_str, -(sp)
+					jsr pc, printSentence
+					tst (sp)+
+					jsr pc, endLine
+					jsr pc, printTime
+					rts pc
+
+
+	
+printTime:
+					mov #time1_msg_str, -(sp)
+					jsr pc, printSentence
+					tst (sp)+
+					mov @#msg_time, -(sp)
+					jsr pc, toStringPrint
+					tst (sp)+
+					mov #time2_msg_str, -(sp)
+					jsr pc, printSentence
+					tst (sp)+
+					jsr pc, endLine
+					jsr pc, endLine
+					rts pc
+								
+
+
+toStringPrint:
+					mov r0, -(sp)
+					mov r1, -(sp)
+					mov r2, -(sp)
+					mov 10(sp), r0
+					mov #int_to_string_word, r2
+loop_time:			tst r0
+					beq end_to_string
+					movb r0, r1
+					bic #370, r1
+					add #60, r1
+					movb r1, (r2)+
+					asr r0
+					asr r0
+					asr r0
+					br loop_time
+end_to_string:		movb #'@, (r2)
+					mov #int_to_string_word, r2
+					mov r2, -(sp)
+					jsr pc, invertString
+					tst (sp)+
+					mov r2, -(sp)
+					jsr pc, printSentence
+					tst (sp)+
+					clr (r2)+
+					clr (r2)+
+					clr (r2)+
+					mov (sp)+, r2
+					mov (sp)+, r1
+					mov (sp)+, r0
+					rts pc
+					
+					
+			
+invertString:
+					mov r0, -(sp)
+					mov r1, -(sp)
+					mov 6(sp), r0
+					mov r0, r1
+loop_reach_end:		cmpb (r1)+, #'@
+					beq invert-4
+					br loop_reach_end
+					dec r1
+					dec r1
+invert:				cmp r0, r1
+					bpl end_invert
+					movb (r0), temp_char
+					movb (r1), (r0)+
+					movb @#temp_char, (r1)
+					dec r1
+					br invert
+end_invert:			mov (sp)+, r1
+					mov (sp)+, r0
+					rts pc
+			
+					
+
+;CHANGE IS_PREFIX:::	WE WANT EXACT X-MISTAKES, NOT UP TO X MISTAKES. CHANGE >=0 TO == 0!!!				
+	
+; When we enter this subroutine:	r0 - Target_string
+;									r1 - Target_prefix
+;									r2 - X (num of allowed mistakes)	
+; Return value: in-register. The regsiter is r1.
+; The subroutine returns 1 if Target_prefix is a prefix of Target_string, up to X mistakes (removal, addition or swapping characters), and 0 otherwise
+; Linking register is pc
+isPrefix:		
+					mov r0, -(sp)				; pushing r0 into the stack as a parmeter to the auxIsPrefix function
+					mov r1, -(sp)				; pushing r1 into the stack as a parmeter to the auxIsPrefix function
+					mov r2, -(sp)				; pushing r2 into the stack as a parmeter to the auxIsPrefix function
+					jsr pc, auxIsPrefix 			; enter the auxIsPrefix recursive fucntion
+					tst (sp)+					; clearing the stack...
+					tst (sp)+
+					tst (sp)+
+					mov @#out_is_prefix, 2(sp)	; assign the result of auxIsPrefix as a return value from the function
+					clr @#out_is_prefix
+					rts pc
+					
+					
+auxIsPrefix:			tst 2(sp)
+					bmi false_end_aux 			; stop condition: x<0. return false
+					cmpb @4(sp), #'@
+					beq true_end_aux 			; stop condition: we've reached the end of the sentence. success! return true
+					cmpb @6(sp), #'@
+					beq aux_f1 					; the sentence reached end of string before the prefix did: try to remove its last digits
+					cmpb @4(sp), @6(sp)
+					beq aux_f2 					; no mistakes in this comparsion: both characters are identical. Advance the pointers and call the function again
+					dec 2(sp) 					; there is a mistake: decrement x
+					inc 4(sp) 					; try: remove one letter by incrementing the prefix pointer 
+					mov 6(sp), -(sp)			; push the values into the stack
+					mov 6(sp), -(sp)
+					mov 6(sp), -(sp)
+					jsr pc, auxIsPrefix			; call the function again with the changes
+					tst (sp)+					; pops the values out of the stack
+					tst (sp)+
+					tst (sp)+
+					cmp out_is_prefix, #1
+					beq true_end_aux				; if the return value is 1: return true.
+					dec 4(sp)					; undo [remove] changes!
+					inc 6(sp) 					; try: add one letter by incrementing the sentence pointer
+					mov 6(sp), -(sp)			; push the values into the stack
+					mov 6(sp), -(sp)
+					mov 6(sp), -(sp)
+					jsr pc, auxIsPrefix			; call the function again with the changes
+					tst (sp)+					; pops the values out of the stack
+					tst (sp)+
+					tst (sp)+
+					cmp out_is_prefix, #1		
+					beq true_end_aux				; if the return value is 1: return true.
+					inc 4(sp) 					; try: swap the letter by incrementing both the prefix and  sentence pointer (sentence pointer already advanced!)
+					mov 6(sp), -(sp)			; push the values into the stack
+					mov 6(sp), -(sp)
+					mov 6(sp), -(sp)
+					jsr pc, auxIsPrefix			; call the function again with the changes
+					tst (sp)+					; pops the values out of the stack
+					tst (sp)+
+					tst (sp)+
+					cmp out_is_prefix, #1
+					beq true_end_aux				; if the return value is 1: return true.
+					; nothing works! return false
+false_end_aux:		mov #0, out_is_prefix			; return value is 0 (false)
+					rts pc
+true_end_aux:		tst r2
+					bne false_end_aux
+					mov #1, out_is_prefix			; return value is 1 (true)
+					rts pc
+aux_f1:				; we get here if the sentence pointer reached the end and the prefix pointer did not
+					dec 2(sp)					; decrement X (this is an error)
+					inc 4(sp)					; increment the prefix pointer - "remove"
+					mov 6(sp), -(sp)			; push the values into the stack
+					mov 6(sp), -(sp)
+					mov 6(sp), -(sp)
+					jsr pc, auxIsPrefix			; call the function again with the changes
+					tst (sp)+					; pops the values out of the stack
+					tst (sp)+
+					tst (sp)+
+					cmp out_is_prefix, #1
+					beq true_end_aux				; if the return value is 1: return true.
+					rts pc
+aux_f2:				; we get here if the current character in the sentence and the prefix are identical: advance both words to the next letter
+					inc 4(sp)
+					inc 6(sp)
+					; advanced the letters of both words. Go to the function again:
+					mov 6(sp), -(sp)			; push the values into the stack
+					mov 6(sp), -(sp)
+					mov 6(sp), -(sp)
+					jsr pc, auxIsPrefix			; call the function again with the changes
+					tst (sp)+					; pops the values out of the stack
+					tst (sp)+
+					tst (sp)+
+					cmp out_is_prefix, #1
+					beq true_end_aux				; if the return value is 1: return true.
+					rts pc	
+	
+					
+					
+					
+. = torg + 10000
+
+LF:					.byte 10.					; <LINE FEED> ascii value
+CR:					.byte 13.					; <CARRIAGE RETURN> ascii value
+backspace:			.byte 8. 					; <BACKSPACE> ascii value	
+space:				.byte 32.					; <WHITESPACE> ascii value
+exc_mark:			.byte 33.					; <EXCLAMATION MARK> ascii value
+user_write:			.byte 62.					; '> ascii value
+temp_char:			.byte 0
+.even
+
+rate:				.word 825. ; DELETE LATER !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 800?
+msg_length:			.word 0						; the message's length is stored here
+msg_time:			.word 0						; the time for the message's construction is stored here				
+out_is_prefix: 		.word 0						; the return value of auxIsPrefix is stored here
+equal_result: 		.word 0
+strp: 				.word 0
+f2_len: 				.word 0						
+next_length:			.word 0						
+dict_len:			.word 0						; the dictionary's length is stored here
+flag_first_node:		.word 0						; a flag for RevBubble signaling whether or not we're at the first node of the list
+curr_char_add:		.word curr_word
+curr_msg_char_add:	.word message
+int_to_string_word:	.blkw 3
+
+curr_word:			.blkw 6
+message:				.blkw 264					; the final message is stored here
+
+; for convenience, all of the possible constant strings for display are stored here
+len_msg_str:			.ascii <Please enter length of the message:@>
+secs_msg_str:		.ascii <Please enter number of seconds to finish the message:@>
+start1_msg_str:		.ascii <You can start to write your message.@>
+start2_msg_str:		.ascii <Don't worry we'll assist you!@>
+add_msg_str:			.ascii <' was added to the message!@>
+show1_msg_str:		.ascii <The message is: "@>
+show2_msg_str:		.ascii <".@>
+err_msg_str:			.ascii <Sorry '@>
+err1_msg_str:		.ascii <' not in our dictionary!@>
+err2_msg_str:		.ascii <' has no other suggestions in our dictionary!@>
+fix1_msg_str:		.ascii <Do you mean '@>
+fix2_msg_str:		.ascii <' y/n?@>
+time1_msg_str:		.ascii <Time left: @>
+time2_msg_str:		.ascii < seconds@>
+times_up_msg_str:		.ascii <Sorry Time is up!@>
+done1_msg_str:		.ascii <Thank you!@>
+done2_msg_str:		.ascii <Bye Bye!@>
+
+.even
+
+;-------------------
+; REMOVE THIS LATER! -----------------------------------------------------------------------------------------------------------------------------
+;-------------------
+.=torg + 12000
+
+
+X:				.word 1
+
+Dict:
+node1:		.word str1, node2
+node2:		.word str2, node3
+node3:		.word str3, node4
+node4:		.word str4, node5
+node5:		.word str5, node6
+node6:		.word str6, node7
+node7:		.word str7, node8
+node8:		.word str8, node9
+node9:		.word str9, node10
+node10:		.word str10, 0
+
+str1:			.ascii	<go@>
+str2:			.ascii	<hook@>
+str3:			.ascii	<robe@>
+str4:			.ascii	<room@>
+str5:			.ascii	<rose@>
+.even
+str6:		.blkw 5
+str7:		.blkw 5
+str8:		.blkw 5
+str9:		.blkw 5
+str10:		.blkw 5
+
+ExpectedDict:
+_node1:		.word _str1, _node2
+_node2:		.word _str2, _node3
+_node3:		.word _str3, _node4
+_node4:		.word _str4, _node5
+_node5:		.word _str5, _node6
+_node6:		.word _str6, _node7
+_node7:		.word _str7, _node8
+_node8:		.word _str8, _node9
+_node9:		.word _str9, _node10
+_node10:		.word _str10, 0
+
+_str1:		.ascii	<I@>
+_str2:		.ascii	<a@>
+_str3:		.ascii	<book@>
+_str4:		.ascii	<buy@>
+_str5:		.ascii	<go@>
+_str6:		.ascii	<hook@>
+_str7:		.ascii	<robe@>
+_str8:		.ascii	<room@>
+_str9:		.ascii	<rose@>
+_str10:		.ascii	<should@>

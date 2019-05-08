@@ -1,0 +1,55 @@
+. = torg + 3000
+main:
+	mov pc , sp
+	tst -(sp)
+	mov equal_result, -(sp)
+	mov #word1 , -(sp)
+	mov #word2 , -(sp)
+	jsr pc , wordsEqual
+	tst (sp)+
+	tst (sp)+
+	mov (sp)+, equal_result
+	halt
+
+wordsEqual:
+	mov r1, -(sp)
+	mov r2, -(sp)
+	mov 6(sp), r2 ;word2
+	mov 10(sp), r1 ;word1
+words1_equal:
+	cmpb (r1)+, (r2)+
+	beq words2_equal
+	br words3_equal
+words2_equal:
+	cmpb -(r1), #'@
+	beq words4_equal
+	tstb (r1)+
+	br words1_equal
+words3_equal: ;failure
+	mov (sp)+, r2
+	mov (sp)+, r1
+	mov #0, 6(sp)
+	rts pc
+
+words4_equal: ;success
+	mov (sp)+, r2
+	mov (sp)+, r1
+	mov #1, 6(sp)
+	rts pc
+	
+	
+	
+	
+.=torg+10000
+word1: .ascii <@>
+word2: .ascii <@>
+.even
+equal_result: .word 2
+strp: .word 0
+f2_len: .word 0
+length: .word 6
+Setmin: .ascii <a>
+.even
+Setmax: .ascii <z>
+.even
+Delim: .ascii < >

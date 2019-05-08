@@ -1,0 +1,177 @@
+Technion Computer Science Department -- PDP/11 X-Assembler Version (5.5) AA.
+
+
+	S O U R C E    F I L E    :    ex3_isprefix.s11
+	===============================================
+
+000000                             1     .=torg + 3000
+003000                             2     main:
+003000   010706                    3     	mov pc, sp
+003002   005746                    4     	tst -(sp)
+003004   012700 012036             5     	mov #word_word, r0
+003010   012701 012063             6     	mov #word_prefix, r1
+003014   016702 007002             7     	mov X, r2
+003020   004767 000002             8     	jsr pc, isPrefix
+003024   000000                    9     	halt
+                                  10     
+                                  11     ;r0 - word
+                                  12     ;r1 - prefixTest
+                                  13     ;r2 - X	
+003026                            14     isPrefix:
+003026   010046                   15     	mov r0, -(sp)
+003030   010146                   16     	mov r1, -(sp)
+003032   010246                   17     	mov r2, -(sp)
+003034   004767 000014            18     	jsr pc, auxIsPrefix
+003040   005726                   19     	tst (sp)+
+003042   005726                   20     	tst (sp)+
+003044   005726                   21     	tst (sp)+
+003046   016701 001726            22     	mov out_is_prefix, r1
+003052   000207                   23     	rts pc
+003054                            24     auxIsPrefix:
+003054   005766 000002            25     	tst 2(sp)
+003060   100504                   26     	bmi false_end_aux ;x<0
+003062   127627 000004 000100     27     	cmpb @4(sp), #'@
+003070   001504                   28     	beq true_end_aux ;prefix = '@
+003072   127627 000006 000100     29     	cmpb @6(sp), #'@
+003100   001504                   30     	beq aux_f1 ;word = '@
+003102   127676 000004 000006     31     	cmpb @4(sp), @6(sp)
+003110   001524                   32     	beq aux_f2 ;prefix = word
+003112   005366 000002            33     	dec 2(sp) ; there is a mistake: x--
+003116   005266 000004            34     	inc 4(sp) ; try: remove one letter
+003122   016646 000006            35     	mov 6(sp), -(sp)
+003126   016646 000006            36     	mov 6(sp), -(sp)
+003132   016646 000006            37     	mov 6(sp), -(sp)
+003136   004767 177712            38     	jsr pc, auxIsPrefix
+003142   005726                   39     	tst (sp)+
+003144   005726                   40     	tst (sp)+
+003146   005726                   41     	tst (sp)+
+003150   026727 001624 000001     42     	cmp out_is_prefix, #1
+003156   001451                   43     	beq true_end_aux
+003160   005366 000004            44     	dec 4(sp) ; try: add one letter
+003164   005266 000006            45     	inc 6(sp)
+003170   016646 000006            46     	mov 6(sp), -(sp)
+003174   016646 000006            47     	mov 6(sp), -(sp)
+003200   016646 000006            48     	mov 6(sp), -(sp)
+003204   004767 177644            49     	jsr pc, auxIsPrefix
+003210   005726                   50     	tst (sp)+
+003212   005726                   51     	tst (sp)+
+003214   005726                   52     	tst (sp)+
+003216   026727 001556 000001     53     	cmp out_is_prefix, #1
+003224   001426                   54     	beq true_end_aux
+003226   005266 000004            55     	inc 4(sp) ; try: swap 
+003232   016646 000006            56     	mov 6(sp), -(sp)
+003236   016646 000006            57     	mov 6(sp), -(sp)
+003242   016646 000006            58     	mov 6(sp), -(sp)
+003246   004767 177602            59     	jsr pc, auxIsPrefix
+003252   005726                   60     	tst (sp)+
+003254   005726                   61     	tst (sp)+
+003256   005726                   62     	tst (sp)+
+003260   026727 001514 000001     63     	cmp out_is_prefix, #1
+003266   001405                   64     	beq true_end_aux
+                                  65     	; nothing works! return false
+003270   000400                   66     	br false_end_aux
+003272                            67     false_end_aux:
+003272   012767 000000 001500     68     	mov #0, out_is_prefix
+003300   000207                   69     	rts pc
+003302                            70     true_end_aux:
+003302   012767 000001 001470     71     	mov #1, out_is_prefix
+003310   000207                   72     	rts pc
+003312                            73     aux_f1:
+003312   005366 000002            74     	dec 2(sp)
+003316   005266 000004            75     	inc 4(sp)
+003322   016646 000006            76     	mov 6(sp), -(sp)
+003326   016646 000006            77     	mov 6(sp), -(sp)
+003332   016646 000006            78     	mov 6(sp), -(sp)
+003336   004767 177512            79     	jsr pc, auxIsPrefix
+003342   005726                   80     	tst (sp)+
+003344   005726                   81     	tst (sp)+
+003346   005726                   82     	tst (sp)+
+003350   026727 001424 000001     83     	cmp out_is_prefix, #1
+003356   001751                   84     	beq true_end_aux
+003360   000207                   85     	rts pc
+003362                            86     aux_f2:
+003362   005266 000004            87     	inc 4(sp)
+003366   005266 000006            88     	inc 6(sp)
+                                  89     	; advanced the letters of both words
+003372   016646 000006            90     	mov 6(sp), -(sp)
+003376   016646 000006            91     	mov 6(sp), -(sp)
+003402   016646 000006            92     	mov 6(sp), -(sp)
+003406   004767 177442            93     	jsr pc, auxIsPrefix
+003412   005726                   94     	tst (sp)+
+003414   005726                   95     	tst (sp)+
+003416   005726                   96     	tst (sp)+
+003420   026727 001354 000001     97     	cmp out_is_prefix, #1
+003426   001725                   98     	beq true_end_aux
+003430   000207                   99     	rts pc	
+                                 100     
+003432                           101     .=torg+5000 
+005000   000000                  102     out_is_prefix: .word 0
+                                 103     
+                                 104     
+005002                           105     .= torg + 12000
+012000      101                  106     Setmin: .byte 'A
+012001      103                  107     Setmax: .byte 'C
+012002      040                  108     Delim: .byte ' ;this is a space
+012003      000                  109     .even
+012004   012026 012031 012033    110     Dict: .word word1, word2, word3, word4
+         012035                          
+012014   000004                  111     DictLen: .word 4
+012016      101    102    100    112     Sent: .ascii <AB@>
+012021      000                  113     .even
+012022   000006                  114     X: .word 6
+012024   000006                  115     MaxLen: .word 6
+012026      101    103    100    116     word1: .ascii <AC@>
+012031      102    100           117     word2: .ascii <B@>
+012033      103    100           118     word3: .ascii <C@>
+012035      100                  119     word4: .ascii <@>
+                                 120     
+012036      150    145    154    121     word_word: .ascii <hellohellohellohello@>
+            154    157    150            
+            145    154    154            
+            157    150    145            
+            154    154    157            
+            150    145    154            
+            154    157    100            
+012063      150    145    154    122     word_prefix: .ascii <hellohllohell1111ohdllo8@> 
+            154    157    150            
+            154    154    157            
+            150    145    154            
+            154    061    061            
+            061    061    157            
+            150    144    154            
+            154    157    070            
+            100                          
+012114                           123     .even
+                                 124     
+012114   000000 000000 000000    125     Output: .blkw 40
+012214                           126     .even
+
+
+	S Y M B O L   T A B L E
+	=======================
+
+SYMBOL    VALUE   TYPE
+------    -----   ----
+main      003000  text     
+word_wor  012036  text     
+word_pre  012063  text     
+X         012022  text     
+isPrefix  003026  text     
+auxIsPre  003054  text     
+out_is_p  005000  text     
+false_en  003272  text     
+true_end  003302  text     
+aux_f1    003312  text     
+aux_f2    003362  text     
+Setmin    012000  text     
+Setmax    012001  text     
+Delim     012002  text     
+Dict      012004  text     
+word1     012026  text     
+word2     012031  text     
+word3     012033  text     
+word4     012035  text     
+DictLen   012014  text     
+Sent      012016  text     
+MaxLen    012024  text     
+Output    012114  text     

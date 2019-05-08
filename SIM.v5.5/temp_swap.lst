@@ -1,0 +1,45 @@
+Technion Computer Science Department -- PDP/11 X-Assembler Version (5.5) AA.
+
+
+	S O U R C E    F I L E    :    temp_swap.s11
+	============================================
+
+000000                             1     . = torg + 5000
+005000                             2     main:				
+005000   010706                    3     					mov pc, sp
+005002   005746                    4     					tst -(sp)
+005004   012746 006000             5     					mov #word1, -(sp)
+005010   012746 006002             6     					mov #word2, -(sp)
+005014   004767 000006             7     					jsr pc, swapAddress
+005020   005726                    8     					tst (sp)+
+005022   005726                    9     					tst (sp)+
+005024   000000                   10     					halt
+                                  11     					
+                                  12     		
+                                  13     		
+                                  14     		
+005026                            15     swapAddress:
+005026   010046                   16     					mov r0, -(sp)
+005030   016600 000004            17     					mov 4(sp), r0
+005034   016676 000006 000004     18     					mov 6(sp), @4(sp)
+005042   010076 000006            19     					mov r0, @6(sp)
+005046   012600                   20     					mov (sp)+, r0
+005050   000207                   21     					rts pc
+                                  22     					
+                                  23     					
+                                  24     	
+                                  25     	
+005052                            26     . = torg + 6000
+006000   000000                   27     word1:				.word 0.
+006002   000000                   28     word2:				.word 0.
+
+
+	S Y M B O L   T A B L E
+	=======================
+
+SYMBOL    VALUE   TYPE
+------    -----   ----
+main      005000  text     
+word1     006000  text     
+word2     006002  text     
+swapAddr  005026  text     

@@ -1,0 +1,180 @@
+Technion Computer Science Department -- PDP/11 X-Assembler Version (5.5) AA.
+
+
+	S O U R C E    F I L E    :    ex2.s11
+	======================================
+
+000000                             1     .=torg+1000
+001000                             2     main:		;initializing values:
+001000   016701 003774             3     			mov strings_len, r1 ; r1: prefixes array length
+001004   016705 003772             4     			mov strings, r5 ; r5: holds the address of the current prefix word
+001010   016704 004002             5     			mov dict, r4 ; r4: iterator for dictionary words' letters
+001014   016767 003762 004044      6     			mov strings, max_string ; default max_string: first word in the prefixes array
+001022                             7     loop1:		;outer loop: go through the prefixes array words
+001022   016767 003770 001752      8     			mov dict, curr_dict ; initialzie the current dictionary word to be the first dictionary word
+001030   016702 003760             9     			mov dict_len, r2 ; r2: dictionary array length
+001034   012767 000000 001736     10     			mov #0, curr_score ; curr_score: amount of matches found for a specific word
+001042   012700 000000            11     loop2:		mov #0, r0 ; r0: flag to check for a matching mistake
+001046   010503                   12     			mov r5, r3 ; r3: iterator for prefixes' letters. 
+001050   000167 000074            13     			jmp loop_remove; ; this section checks if the word is a prefix (4 separate checks)
+001054                            14     inc_input:	;increase the iterator for the current prefix letter to the end of the word
+001054   122723 000100            15     			cmpb #'@, (r3)+
+001060   001375                   16     			bne inc_input ; move to the next letter
+001062   005303                   17     			dec r3 ; r3 points to the start of the next word: move it back to @
+001064                            18     inc_dict:	;increase the iterator for the current dictionary letter to the start of the next word
+001064   122724 000100            19     			cmpb #'@, (r4)+
+001070   001401                   20     			beq end_loop2 ; r4 points to the next dictionary word's first letter
+001072   000774                   21     			br inc_dict ; move to the next letter
+001074                            22     end_loop2:	;end of the outer loop: move to the next dictionary word and branch
+001074   010467 001702            23     			mov r4, curr_dict
+001100   077220                   24     			sob r2, loop2
+001102   016704 003710            25     			mov dict, r4 ; initialize r4: r4 now points to the start of the dictionary array
+001106   005203                   26     			inc r3 ; when we get here: r3 points to @. Move it to the start of the next word in the array
+001110   010305                   27     			mov r3, r5 ; the current word is now the next word in the prefixes array
+001112   077135                   28     			sob r1, loop1
+001114   000000                   29     			halt
+                                  30     			
+001116                            31     match: 		;matching process success: the word is a prefix
+001116   005267 001656            32     			inc curr_score
+001122   026767 001652 003740     33     			cmp curr_score, max_score
+001130   003001                   34     			bgt set_max ; if this prefix has more matches than the rest of the words - update the new maximum
+001132   000750                   35     			br inc_input
+001134                            36     set_max:    ;found new max: replace current max_score and max_string values
+001134   016767 001640 003726     37     			mov curr_score, max_score ; the number of matches is the new maximum
+001142   010567 003720            38     			mov r5, max_string ; r5 points to the first letter of the prefix: update the max_string
+001146   000742                   39     			br inc_input
+                                  40     
+                                  41     
+001150                            42     loop_remove:		;checks if the current word is a prefix of the current dictionary word if we remove a single letter from it
+001150   122713 000100            43     					cmpb #'@, (r3)
+001154   001760                   44     					beq match ; r3 points to the end of the current word: it's a match
+001156   122714 000100            45     					cmpb #'@, (r4)
+001162   001470                   46     					beq special_case_remove ; r4 points to the end of the dictionary word and r3 does not: check special case (same length words)
+001164   122324                   47     					cmpb (r3)+, (r4)+
+001166   001770                   48     					beq loop_remove ; r3 and r4 point to identical letters: continue to the next letter
+001170   005200                   49     					inc r0 ; activate the mistake flag
+001172   005304                   50     					dec r4 ; move the dictionary iterator to the previous letter
+001174   020027 000001            51     					cmp r0, #1
+001200   001763                   52     					beq loop_remove ; keep checking for match
+                                  53     					;not a match if we remove a letter: initialize iterators and flag
+001202   016704 001574            54     					mov curr_dict, r4
+001206   010503                   55     					mov r5, r3
+001210   012700 000000            56     					mov #0, r0
+001214                            57     loop_flawless:		;checks if the current word is a perfect prefix of the current dictionary word
+001214   122713 000100            58     					cmpb #'@, (r3)
+001220   001736                   59     					beq match ; r3 points to the end of the current word: it's a match
+001222   122714 000100            60     					cmpb #'@, (r4)
+001226   001712                   61     					beq inc_input ; r4 points to the end of the dictionary word and r3 does not: not a prefix
+001230   122324                   62     					cmpb (r3)+, (r4)+
+001232   001770                   63     					beq loop_flawless ; r3 and r4 point to identical letters: continue to the next letter
+                                  64     					;not a perfect match: initialize iterators
+001234   016704 001542            65     					mov curr_dict, r4
+001240   010503                   66     					mov r5, r3
+001242   020027 000001            67     					cmp r0, #1
+001246                            68     loop_swap:			;checks if the current word is a prefix of the current dictionary word if we replace one of its letters
+001246   122713 000100            69     					cmpb #'@, (r3)
+001252   001721                   70     					beq match ; r3 points to the end of the current word: it's a match
+001254   122714 000100            71     					cmpb #'@, (r4)
+001260   001675                   72     					beq inc_input ; r4 points to the end of the dictionary word and r3 does not: not a prefix
+001262   122324                   73     					cmpb (r3)+, (r4)+
+001264   001770                   74     					beq loop_swap ; r3 and r4 point to identical letters: continue to the next letter
+001266   005200                   75     					inc r0 ; activate the mistake flag
+001270   020027 000001            76     					cmp r0, #1
+001274   001764                   77     					beq loop_swap ; keep checking for match
+                                  78     					;not a match if we swap one letter: initialize iterators and flag
+001276   016704 001500            79     					mov curr_dict, r4
+001302   010503                   80     					mov r5, r3
+001304   012700 000000            81     					mov #0, r0
+001310                            82     loop_addition:		;checks if the current word is a prefix of the current dictionary word if we add a single letter to it
+001310   122713 000100            83     					cmpb #'@, (r3)
+001314   001700                   84     					beq match ; r3 points to the end of the current word: it's a match
+001316   122714 000100            85     					cmpb #'@, (r4)
+001322   001654                   86     					beq inc_input ; r4 points to the end of the dictionary word and r3 does not: not a prefix. NOTE: we may get here if the compared words are of the same len
+001324   122324                   87     					cmpb (r3)+, (r4)+
+001326   001770                   88     					beq loop_addition ; r3 and r4 point to identical letters: continue to the next letter
+001330   005200                   89     					inc r0 ; activate the mistake flag
+001332   005303                   90     					dec r3 ; move the current prefix iterator to the previous letter
+001334   020027 000001            91     					cmp r0, #1
+001340   001763                   92     					beq loop_addition ; keep checking for match
+001342   000644                   93     					br inc_input ; not a match! 
+001344                            94     special_case_remove:;trap: if we get here from loop_remove, the dictionary word iterator has reached the last letter, but it is still possible that there is a 
+001344   020027 000000            95     					cmp r0, #0
+001350   001241                   96     					bne inc_input ; flag is acivated: already removed one letter. not a match
+001352   005203                   97     					inc r3 ; move the prefix iterator to the next letter
+001354   122713 000100            98     					cmpb #'@, (r3)
+001360   001656                   99     					beq match ; r3 and r4 both point to the end of the respective word: it's a match (special case condition)
+001362   000634                  100     					br inc_input ; prefix word is still not over: too long. not a match
+                                 101     
+001364                           102     .=torg + 3000
+                                 103     
+003000   000000                  104     curr_score: .word 0 ; counts the amount of matches of the current prefix word
+003002   000000                  105     curr_dict:  .word 0 ; holds the address of the first letter in the current dictionary word
+                                 106     
+                                 107     			
+003004                           108     .=torg + 5000
+                                 109     
+005000   000002                  110     strings_len:	.word 	2
+005002   005006                  111     strings:		.word str1
+005004   005007                  112     				.word str2
+005006      100                  113     str1:			.ascii	<@>
+005007      141    164    141    114     str2:			.ascii	<atam@>
+            155    100                   
+                                 115     
+005014                           116     .even
+005014   000005                  117     dict_len:		.word 	5
+005016   005030                  118     dict:	        .word term1
+005020   005031                  119     				.word term2
+005022   005036                  120     				.word term3
+005024   005051                  121     				.word term4
+005026   005057                  122     				.word term5
+                                 123     
+005030      100                  124     term1:			.ascii	<@>
+005031      141    172    141    125     term2:			.ascii	<azam@>
+            155    100                   
+005036      141    164    155    126     term3:			.ascii	<atmosphere@>
+            157    163    160            
+            150    145    162            
+            145    100                   
+005051      155    141    164    127     term4:			.ascii	<matam@>
+            141    155    100            
+005057      143    157    155    128     term5:			.ascii	<combi@>
+            142    151    100            
+                                 129     
+005065      000                  130     .even
+005066   000000                  131     max_string: 	.word 0
+005070   000000                  132     max_score: 		.word 0
+
+
+	S Y M B O L   T A B L E
+	=======================
+
+SYMBOL    VALUE   TYPE
+------    -----   ----
+main      001000  text     
+strings_  005000  text     
+strings   005002  text     
+dict      005016  text     
+max_stri  005066  text     
+loop1     001022  text     
+curr_dic  003002  text     
+dict_len  005014  text     
+curr_sco  003000  text     
+loop2     001042  text     
+loop_rem  001150  text     
+inc_inpu  001054  text     
+inc_dict  001064  text     
+end_loop  001074  text     
+match     001116  text     
+max_scor  005070  text     
+set_max   001134  text     
+special_  001344  text     
+loop_fla  001214  text     
+loop_swa  001246  text     
+loop_add  001310  text     
+str1      005006  text     
+str2      005007  text     
+term1     005030  text     
+term2     005031  text     
+term3     005036  text     
+term4     005051  text     
+term5     005057  text     

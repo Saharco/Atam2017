@@ -1,0 +1,331 @@
+.=torg+4000
+
+main: mov pc, -(sp) 	;init stack
+	  mov #Sent, r0 	;put Sent address in r0
+	  mov #Output, r1	;put Output address in r1
+	  mov X, r2			;put X in r2
+	  mov MaxLen, r3	;put MaxLen in r3
+	  mov #Setmin, r4	;put Setmin in r4
+	  mov MaxLen, r5    ;temp size for init Output 
+initLoop:				;init Output array to be the first string in the languege in size of r3.
+				tst r5	;check if r5(temp_len of Output) is zero
+				bne wordNotEmpty ;if r5 is not zero (Output is not empty) go to wordNotEmpty
+				movb #'@, @r1	  ;if r5 is zero (Output should be the empty word "@")	
+				br done				;we have Output-"@", go to done.
+wordNotEmpty:	movb @r4, @r1		;r1 points to a letter in Output, so we make each Outputs' letters to be Setmin letter 
+				tstb (r1)+			;r1 points to next letter
+				sob r3, initLoop  	;loop r3 times over output letters.
+	mov r5, r3		   ;reset r3 with his original size(brfore sob loop)
+	movb #'@, @r1		;put in the last letter of output @
+	
+outputCheck:	mov #Output, r1		;reset r1 to be the first letter of Output
+				jsr pc, isPrefix	  ;go to isPrefix function to check if Output valids.
+				tst r1				  ;check r1's PSW
+				beq nextWord		  ;if r1 is 0(the return from isPrefix) so current Output word is not good. go to nextWord
+				tst -(sp)			  ;allocate place for result at the bottom of the stack.
+				mov #Dict, -(sp)	  ;put Dict in the stack
+				mov DictLen, -(sp)	  ;put DictLen in the stack
+				mov #Output, -(sp)	  ;put Output in the stack
+				mov Delim, -(sp)	  ;put Delim in the stack
+				jsr pc, sentInDict    ;go to sentInDict funstion to check if Output valids.
+				cmp (sp)+, (sp)+	  ;pop two first elements of stack
+				cmp (sp)+, (sp)+  	  ;pop two first elements of stack
+				tst (sp)+			  ;pop and test first element(result from sentInDict)
+				beq nextWord		  ;if result is 0, so the current Output is not good. go to nextWord.
+				br done				  ;if we reach here-> Output is valid .go to done
+	
+	nextWord:	mov #Output, -(sp)		;put Output addres in stack
+				mov r3, -(sp)			;put len of Output in stack
+				jsr pc, nextString		;go to nextString function that will change Output to be the next word in the language.
+				cmp (sp)+, (sp)+		;pop 2 first elements of stack
+				mov r3, length			;put in label length the value of r3
+				tst -(sp)				;allocate place for result from isStart at the bottom of the stack
+				jsr r5, isStart			;go to isStart to check if Output is not first of languege in r3 size. 
+		length:	.blkw 1					;in line parameter (size of r3) to isStart function
+				.word Output			;in line parameter (Outpus address) to isStart function.
+				tst (sp)+				;pop head of stack.
+				beq outputCheck			;if result from isStart (head Of Stack) is 0, so go to outputCheck 
+				mov #Output, r1			;if result from isStart is 1, so Outpus is the first word in r3 size again
+				dec r3					;to prevent repeat, we will decrease r3(size of Output)
+				mov r3, r5				;move to temp r5 the original value of r3 
+				br initLoop				;init Output with the first word in string in size of r5 size
+		done:   
+		
+			halt
+			
+			
+			
+;isPrefix function checks if @prefiex is inital of @word with @X mistakes(such as adding, removing or replacing letters).
+;pc is the link register
+;param's:
+		;@prefiex- passed to the funtion *in register* r1. passed by address.
+		;@word- passed to the funtion *in register* r0. passed by address.
+		;@X- passed to the funtion *in register* r2. passed by value.
+;return:
+;The function returns *in register*  r1 the value 1 if prefix is inital of word with X mistakes, and 0 otherwise.	  
+isPrefix:		mov r3, -(sp)			;Push r3 old value to stack
+				mov r4, -(sp)			;Push r4 old value to stack
+				mov r5, -(sp)			;Push r5 old value to stack
+				mov r0, r3				;put in r3 the address of first letter of word
+				mov r1, r4				;put in r4 the address of first letter of prefix
+				mov r2, r5				;put X in r5 - number of mistakes .
+				mov #100, -(sp) 		;move value 100 to head of the stack - this is a flag so we can know that if the stack has this value in the head, so this is the first call of the rexursive function.
+				clr r1					;Clear r1, where the result will be
+			
+	equalCheck:	tst r1					;check r1 PSW
+				bne recursionEnd		;if r1 is 1, go to recursionEnd
+				cmpb @r3, @r4			;if r1 is 0, compare prefix letter with word letter
+				bne switchCheck			;if the letters are not the same, go to switchCheck
+				cmpb @r3, #'@			;Check if the letters are the same, check if r3 is @ (both words ended) 
+				beq matchFound			; if the letters are the same, so go to matchFound
+				cmpb (r3)+, (r4)+		;if the word didnt end, increase word's letter and prefix's letter
+				br equalCheck			;go to equalCheck
+	matchFound:	inc r1					;if a match was found, so increase result value (r1) by 1
+	recursionEnd:cmp (sp), #100			;if we find in the head of the stack the flag with value 100, so this is the first call of the function
+				bne skip				;this is the first call of the functuion, go to skip
+				tst (sp)+				;pop flag
+				mov (sp)+, r5			;pop and remove old value of r5
+				mov (sp)+, r4			;pop and remove old value of r4
+				mov (sp)+, r3			;pop and remove old value of r3
+				rts pc					;return from function
+	skip:		inc r5					;increase r5??G?G?G?G?D?G??G?G??G?G
+				rts pc					;return from function
+			
+	switchCheck:cmpb @r4, #'@			;check if prefix ended (@ letter)
+				beq addingCheck			;if prefiex ended, go to addingCheck
+				tst r5					;test r5
+				beq recursionEnd		;if r5 is 0 (number of mistakes) go to recursionEnd
+				cmpb @r3, #'@			;check word ended(@letter)
+				beq removalCheck		;if word ended, go to removalCheck
+				dec r5					;decrease r5(number of mistakes)
+				mov r3, -(sp)			;push word to stack
+				mov r4, -(sp)			;push prefiex to stack
+				cmpb (r3)+, (r4)+		;increase word and prefiex to be the next letter in the strings.
+				jsr pc, equalCheck		;go to equalCheck function(rexursive).
+				mov (sp)+, r4			;pop and return old value of r4
+				mov (sp)+, r3			;pop and return old value of r3
+	removalCheck:tst r1					;check if the r1 result from equalCheck 
+				bne recursionEnd		; if the result is 1 so go to recursionEnd
+				dec r5					;if the result is 0, decrease r5
+				mov r3, -(sp)			;push r3 to stack
+				mov r4, -(sp)			;push r4 to stack
+				tstb (r4)+				;increase r4 to be next letter in prefiex
+				jsr pc, equalCheck		;go to equalCheck functuin
+				mov (sp)+, r4			;pop and return r4 old value
+				mov (sp)+, r3			;pop and return r3 old value
+	addingCheck:cmpb @r3, #'@			;check if r3 ended(@ letter)
+				beq recursionEnd		;if r3 ended so go to recursionEnd
+				tst r1					;check r1 PSW
+				bne recursionEnd		;if r1 is 1 go to recursionEnd
+				dec r5					;if r1 is 0 so decrease r5
+				mov r3, -(sp)			;push r3 to stack
+				mov r4, -(sp)			;push r4 to stack
+				tstb (r3)+				;increase r3 to be next letter in word
+				jsr pc, equalCheck		; go to equalCheck rexursive function
+				mov (sp)+, r4			;pop and return r4 old value
+				mov (sp)+, r3			;pop and return r3 old value
+				br recursionEnd			;branch to recursionEnd
+				
+				
+;isStart function checks if @str is the first lexicografic string in size @length in the language.
+;r5 is the link register
+;param's:
+		;@str- passed to the funtion *in line*. passed by address.
+		;@length passed to the function *in line*. passed by value.
+		;@Setmin-local parameter. The first letter in the language. passed by value.
+		;@Setmax-local parameter. The last letter in the language. passed by value.
+		;@Delim-local parameter. The "buffer" letter.passed by value.
+;return:
+;The function returns *in stack* 1 if str is the first lexicografic string, and 0 otherwise.
+isStart:	mov r0, -(sp)			;puts old value of r0 in the stack
+			mov r1, -(sp)			;puts old value of r1 in the stack
+			mov r2, -(sp)			;puts old value of r2 in the stack
+			mov (r5)+, r0			;move first parametet @str to r0
+			mov (r5)+, r1			;move second parametet @length to r1
+			mov #Setmin, r2			;move Setmin letter to r2
+			clr 10(sp)				;clear result(bottom of the stack)
+checkMinLoop:	cmpb @r1, @r2		;compare r1(letter of str) and r2(first letter in language)
+				bne fail			;if not equal, str is not the first lexicografic string, so we pass to fail label
+				tstb (r1)+			;puts in r1 the next lettet to compare with r2
+				sob	r0,checkMinLoop	;loop @length times- comparing each letter of str(in size length) with r2
+				cmpb (r1), #'@		;check if letter in index length is @(each string need to end with @)
+				bne fail			;if str is not end with @ so fail
+				inc 10(sp)			;if it reach to this line so it didnt fail and str is the first lexicografic string, so inc result(10(sp))
+	fail: 	mov (sp)+, r2			;pop r2 old value and returns to r2 it's previous value
+			mov (sp)+, r1			;pop r1 old value and returns to r1 it's previous value
+			mov (sp)+, r0			;pop r0 old value and returns to r0 it's previous value
+			rts r5					;end functuion
+			
+			
+			
+			
+;nextString function change @str to be the next string according to the language order.
+;pc is the link register
+;param's:
+		;@str- passed to the funtion *in stack*. passed by address.
+		;@length passed to the function *in stack*. passed by value.
+		;@Setmin-local parameter. The first letter in the language. passed by value.
+		;@Setmax-local parameter. The last letter in the language. passed by value.
+		;@Delim-local parameter. The "buffer" letter.passed by value.
+nextString:		mov r0, -(sp)		;puts old value of r0 in the stack
+				mov r1, -(sp)		;puts old value of r1 in the stack
+				mov r2, -(sp)		;puts old value of r2 in the stack
+				mov r3, -(sp)		;puts old value of r3 in the stack
+				mov r4, -(sp)		;puts old value of r4 in the stack
+				mov 14(sp), r0		;move str length to r0
+				mov 16(sp), r1		;move str address to r1
+				mov #Delim, r2		;move Delim to r2
+				mov #Setmin, r3		;move Setmin to r3
+				mov #Setmax, r4		;move Setmax to r4
+				dec r0				;decrease r0 by 1
+				add r0, r1			;puts in r1 the address of last letter in str(one letter before @)
+	delimLoop:	cmpb @r1, @r2		;compare the last letter with the Delim letter
+				bne checkIfMax		;if the last letter in str is not the Delim letter so we go to checkIfMax
+				movb @r3, @r1		;if the last letter in str is Delim, so we replace the last letter with Setmin
+				tstb -(r1)			;puts the  address of one before last letter of str in r1.
+				sob r0, delimLoop	;loop length-1 times-so each time the Delim is a letter in str, the letter where delim was will become Setmin and a letter before it will be increased by one.
+				cmpb @r1, @r2		;same procce with the first letter of str: if it is the delim puts the Setmin instead
+				bne checkIfMax		;if letter of str is not the delim, so check if letter is Setmax, go to checkIfMax
+				movb @r3, @r1		;if letter is Delim, so replace with Setmin.
+				br quit				;finish change str, go to quit
+	checkIfMax: cmpb @r1, @r4		;if the letter is not Delim, compare letter with Setmax
+				bne normalLetter	;if letter is not Setmax, so go to normalLetter
+				movb @r2, @r1		;if letter is Setmax, so replace it with Delim
+				br quit				;finish change, go to quit
+	normalLetter: incb @r1			;if it is not Delim and not Setmax, so increase the letter to be the next in the language.
+		quit: 	mov (sp)+, r4		;pop r4 old value and returns to r4 it's previous value
+				mov (sp)+, r3		;pop r3 old value and returns to r3 it's previous value
+				mov (sp)+, r2		;pop r2 old value and returns to r2 it's previous value
+				mov (sp)+, r1		;pop r1 old value and returns to r1 it's previous value
+				mov (sp)+, r0		;pop r0 old value and returns to r0 it's previous value
+				rts pc				;return from function
+;wordsEqual function checks if @str1 and @str2 are equal strings.
+;pc is the link register
+;param's:
+		;@str1- passed to the funtion *in stack*. passed by address.
+		;@str2 passed to the function *in stack*. passed by address.
+;return:
+;The function returns *in stack* 1 if the string are equal, and 0 otherwise.				
+wordsEqual: 	mov r0, -(sp)		;puts old value of r0 in the stack		
+				mov r1, -(sp)		;puts old value of r1 in the stack
+				mov 6(sp), r0		;puts str1 address in r0
+				mov 10(sp), r1		;puts str2 address in r1
+				clr 12(sp)			;clear the result(bottom of the stack)
+		loop:	cmpb @r0, @r1		;compare str1's letter and str2's letter
+				bne end				;if the letters are not the same, so go to end
+				cmpb @r0, #'@		;if the letters are the same, check if they reached their end(@)
+				beq success			;if they reached their end and it didnt fail, so the strings are equals
+				tstb (r0)+			;increase letter of str1
+				tstb (r1)+			;increase letter if str2
+				br loop				;the string didnt end yet, so continue checking if next letters are the same
+		
+	success:	inc 12(sp)			;in case of succes , increase 12(sp) the result(bottom if the stack)
+		end:	mov (sp)+, r1		;pop r1 old value and returns to r1 it's previous value
+				mov (sp)+, r0		;pop r0 old value and returns to r0 it's previous value
+				rts pc				;return from function
+				
+;sentInDict function checks if @sent is a legal sentence according to the language and the rules for valid sentence.
+;pc is the link register
+;param's:
+		;@dict- passed to the funtion *in stack*. passed by address.
+		;@dict_length passed to the function *in stack*. passed by value.
+		;@sent- passed to the function *in stack*.the sentence for check. passed by address.
+		;@Delim-passed to the function *in stack*. The "buffer" letter.passed by value.
+;return:
+;The function returns *in stack* 1 if sent is valid , and 0 otherwise.				
+sentInDict:				mov r0, -(sp) 				;puts old value of r0 in the stack
+						mov r1, -(sp)				;puts old value of r1 in the stack
+						mov r2, -(sp)				;puts old value of r2 in the stack
+						mov r3, -(sp)				;puts old value of r3 in the stack
+						mov r4, -(sp)				;puts old value of r4 in the stack
+						mov r5, -(sp)				;puts old value of r5 in the stack
+						mov 24(sp), r0				;puts dict address in r0
+						mov 22(sp), r1				;puts dict length value in r1				
+						mov 20(sp), r2				;puts sent address in r0
+						clr r3						;clear r3 which will use to count the current checked word in sent
+						mov 16(sp), r4				;puts Delim letter in r4
+						clr 26(sp)					;clear the result (bottom of the stack)
+						clr r5						;clear r5 which will be use as a flag to state if we reached the end of the sentence(1 if it is,else 0).
+						cmpb @r2, r4				;compare sent's letter with Delim
+						bne wordLoop				;if the letter is not Delim go to wordLoop
+	startWithDelim:		tstb (r2)+					;if the letter is Delim, put in r2 the next letter
+						cmpb @r2, r4				;compare r2 with Delim
+						beq startWithDelim			;if the letter is equal to Delim, go to startWithDelim again until you find a letter that is not Delim
+						
+			endOfWord:	cmpb @r2, #'@				;check if the sent ends (the letter of sent equals to @)
+						beq doneWithSucess			;if the sent ends go to doneWithSuccess
+			wordLoop:			cmpb (r2), #'@		;compare letter with @
+								beq endOfSent		;if they are equal go to endOfSent
+								tstb (r2)+			;put next letter of sent in r2
+								inc r3				;increase r3(length of current word increased)
+								cmpb @r2, r4		;compare r2 letter with Delim
+								bne wordLoop		;if r2 is not Delim go to wordLoop
+								movb #'@, @r2		;if r2 is Delim, the words ends and replace delim with @
+								br chkSent			;go to chkSent
+			endOfSent:			inc r5				;we reached to endOfSent, so change the flag to 1
+			chkSent:			sub r3, r2			;r2 become the first letter of last word.
+								tst -(sp)			;allocate a place on stack (for result from function(wordsEqual)
+								mov r2, -(sp)		;put the current word in sent in the stack
+					dictLoop:	mov (r0)+, -(sp)	;put the current word in dict(r0) in stack and move r0 to be next word in dict
+								jsr pc, wordsEqual	;wordsEqual function, check if current word in sent and current word in dict are equals
+								tst (sp)+			;pop head of the stack
+								tst 2(sp)			;return value fromm wordsEqual
+								bne goToNextWordInSent ;if the words are equal(result=1 -> z!=0), so to goToNextWordInSent
+								sob r1, dictLoop	;loop dict_len times- go over all of the words in dict, and compare to current word in dict
+								add r3, r2			;put the last letter of current word in r2
+								tst r5				;check r5 PSW
+								bne noNeedToChangeWord ; if r5 is 1, it means the sentence ended , go to noNeedToChangeWord.
+								movb r4, @r2		   ;move Delim back to r2(r2 points to the last letter of current word)
+		noNeedToChangeWord:		tst (sp)+			;pop head of stack, r2
+								tst (sp)+			;pop head of stack the allocated space for wordsEqual
+								br exit				;go to exit
+		goToNextWordInSent:		add r3, r2			;if we find that the current word in sent exists in dict, so we put in r2 the letter after the @ of last word.
+						tst r5						;check r5 PSW (r5 is flag indicates if the sentence ended).		
+						bne continueWithoutChanging	; if r5 is 1, it means the sentence ended , go to continueWithoutChanging
+						movb r4, @r2				;move Delim back to r2(r2 points to the last letter of current word)
+continueWithoutChanging:cmp (sp)+, (sp)+			;pop head and next after head of stack
+						mov 24(sp), r0				;reset r0 with dict address
+						mov 22(sp), r1				;reset r1 with dict_len value
+						clr r3						;clear r3-current size of word become 0
+						tst r5						;check if r5>0- meaning we reached the end of sent and the sentence is legal
+						bne doneWithSucess			;if r5!=0, so we reach the end of sent, so go to doneWithSuccess
+						br startWithDelim			;if r5=0, so we need to check if there are more series of Delim letters, so go to startWithDelim
+	doneWithSucess:	inc 26(sp)						;if the sent is legal, increase the result by 1
+			exit:	mov (sp)+, r5					;pop r5 old value and returns to r5 it's previous value
+					mov (sp)+, r4					;pop r4 old value and returns to r4 it's previous value
+					mov (sp)+, r3					;pop r3 old value and returns to r3 it's previous value
+					mov (sp)+, r2					;pop r2 old value and returns to r2 it's previous value
+					mov (sp)+, r1					;pop r1 old value and returns to r1 it's previous value
+					mov (sp)+, r0					;pop r0 old value and returns to r0 it's previous value
+					rts pc							;return from function
+
+					
+.=torg+10000 
+out_is_prefix: .word 0
+equal_result: .word 0
+strp: .word 0
+f2_len: .word 0
+;length: .word 6
+
+.= torg + 12000
+Setmin: .byte 'A
+Setmax: .byte 'C
+Delim: .byte ' ;this is a space
+.even
+Dict: .word word1, word2, word3, word4
+DictLen: .word 4
+Sent: .ascii <AB@>
+.even
+X: .word 4
+MaxLen: .word 6
+word1: .ascii <AC@>
+word2: .ascii <B@>
+word3: .ascii <C@>
+word4: .ascii <@>
+.even
+
+Output: .blkw 40
+.even
+
+
+	

@@ -1,0 +1,108 @@
+.=torg+1000
+main:		;initializing values:
+			mov strings_len, r1 ; r1: prefixes array length
+			mov strings, r5 ; r5: holds the address of the current prefix word
+			mov dict, r4 ; r4: iterator for dictionary words' letters
+			mov strings, max_string ; default max_string: first word in the prefixes array
+loop1:		;outer loop: go through the prefixes array words
+			mov dict, curr_dict ; initialzie the current dictionary word to be the first dictionary word
+			mov dict_len, r2 ; r2: dictionary array length
+			mov #0, curr_score ; curr_score: amount of matches found for a specific word
+loop2:		mov #0, r0 ; r0: flag to check for a matching mistake
+			mov r5, r3 ; r3: iterator for prefixes' letters. 
+			jmp loop_remove; ; this section checks if the word is a prefix (4 separate checks)
+inc_input:	;increase the iterator for the current prefix letter to the end of the word
+			cmpb #'@, (r3)+
+			bne inc_input ; move to the next letter
+			dec r3 ; r3 points to the start of the next word: move it back to @
+inc_dict:	;increase the iterator for the current dictionary letter to the start of the next word
+			cmpb #'@, (r4)+
+			beq end_loop2 ; r4 points to the next dictionary word's first letter
+			br inc_dict ; move to the next letter
+end_loop2:	;end of the outer loop: move to the next dictionary word and branch
+			mov r4, curr_dict
+			sob r2, loop2
+			mov dict, r4 ; initialize r4: r4 now points to the start of the dictionary array
+			inc r3 ; when we get here: r3 points to @. Move it to the start of the next word in the array
+			mov r3, r5 ; the current word is now the next word in the prefixes array
+			sob r1, loop1
+			halt
+			
+match: 		;matching process success: the word is a prefix
+			inc curr_score
+			cmp curr_score, max_score
+			bgt set_max ; if this prefix has more matches than the rest of the words - update the new maximum
+			br inc_input
+set_max:    ;found new max: replace current max_score and max_string values
+			mov curr_score, max_score ; the number of matches is the new maximum
+			mov r5, max_string ; r5 points to the first letter of the prefix: update the max_string
+			br inc_input
+
+
+loop_remove:		;checks if the current word is a prefix of the current dictionary word if we remove a single letter from it
+					cmpb #'@, (r3)
+					beq match ; r3 points to the end of the current word: it's a match
+					cmpb #'@, (r4)
+					beq special_case_remove ; r4 points to the end of the dictionary word and r3 does not: check special case (same length words)
+					cmpb (r3)+, (r4)+
+					beq loop_remove ; r3 and r4 point to identical letters: continue to the next letter
+					inc r0 ; activate the mistake flag
+					dec r4 ; move the dictionary iterator to the previous letter
+					cmp r0, #1
+					beq loop_remove ; keep checking for match
+					;not a match if we remove a letter: initialize iterators and flag
+					mov curr_dict, r4
+					mov r5, r3
+					mov #0, r0
+loop_flawless:		;checks if the current word is a perfect prefix of the current dictionary word
+					cmpb #'@, (r3)
+					beq match ; r3 points to the end of the current word: it's a match
+					cmpb #'@, (r4)
+					beq inc_input ; r4 points to the end of the dictionary word and r3 does not: not a prefix
+					cmpb (r3)+, (r4)+
+					beq loop_flawless ; r3 and r4 point to identical letters: continue to the next letter
+					;not a perfect match: initialize iterators
+					mov curr_dict, r4
+					mov r5, r3
+					cmp r0, #1
+loop_swap:			;checks if the current word is a prefix of the current dictionary word if we replace one of its letters
+					cmpb #'@, (r3)
+					beq match ; r3 points to the end of the current word: it's a match
+					cmpb #'@, (r4)
+					beq inc_input ; r4 points to the end of the dictionary word and r3 does not: not a prefix
+					cmpb (r3)+, (r4)+
+					beq loop_swap ; r3 and r4 point to identical letters: continue to the next letter
+					inc r0 ; activate the mistake flag
+					cmp r0, #1
+					beq loop_swap ; keep checking for match
+					;not a match if we swap one letter: initialize iterators and flag
+					mov curr_dict, r4
+					mov r5, r3
+					mov #0, r0
+loop_addition:		;checks if the current word is a prefix of the current dictionary word if we add a single letter to it
+					cmpb #'@, (r3)
+					beq match ; r3 points to the end of the current word: it's a match
+					cmpb #'@, (r4)
+					beq inc_input ; r4 points to the end of the dictionary word and r3 does not: not a prefix. NOTE: we may get here if the compared words are of the same length, but this is the last check anyway
+					cmpb (r3)+, (r4)+
+					beq loop_addition ; r3 and r4 point to identical letters: continue to the next letter
+					inc r0 ; activate the mistake flag
+					dec r3 ; move the current prefix iterator to the previous letter
+					cmp r0, #1
+					beq loop_addition ; keep checking for match
+					br inc_input ; not a match! 
+special_case_remove:;trap: if we get here from loop_remove, the dictionary word iterator has reached the last letter, but it is still possible that there is a match:
+					cmp r0, #0
+					bne inc_input ; flag is acivated: already removed one letter. not a match
+					inc r3 ; move the prefix iterator to the next letter
+					cmpb #'@, (r3)
+					beq match ; r3 and r4 both point to the end of the respective word: it's a match (special case condition)
+					br inc_input ; prefix word is still not over: too long. not a match
+
+.=torg + 3000
+
+curr_score: .word 0 ; counts the amount of matches of the current prefix word
+curr_dict:  .word 0 ; holds the address of the first letter in the current dictionary word
+
+
+;the input for the program::

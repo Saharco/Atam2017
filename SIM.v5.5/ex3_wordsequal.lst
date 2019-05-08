@@ -1,0 +1,83 @@
+Technion Computer Science Department -- PDP/11 X-Assembler Version (5.5) AA.
+
+
+	S O U R C E    F I L E    :    ex3_wordsequal.s11
+	=================================================
+
+000000                             1     . = torg + 3000
+003000                             2     main:
+003000   010706                    3     	mov pc , sp
+003002   005746                    4     	tst -(sp)
+003004   016746 004772             5     	mov equal_result, -(sp)
+003010   012746 010000             6     	mov #word1 , -(sp)
+003014   012746 010001             7     	mov #word2 , -(sp)
+003020   004767 000012             8     	jsr pc , wordsEqual
+003024   005726                    9     	tst (sp)+
+003026   005726                   10     	tst (sp)+
+003030   012667 004746            11     	mov (sp)+, equal_result
+003034   000000                   12     	halt
+                                  13     
+003036                            14     wordsEqual:
+003036   010146                   15     	mov r1, -(sp)
+003040   010246                   16     	mov r2, -(sp)
+003042   016602 000006            17     	mov 6(sp), r2 ;word2
+003046   016601 000010            18     	mov 10(sp), r1 ;word1
+003052                            19     words1_equal:
+003052   122122                   20     	cmpb (r1)+, (r2)+
+003054   001401                   21     	beq words2_equal
+003056   000405                   22     	br words3_equal
+003060                            23     words2_equal:
+003060   124127 000100            24     	cmpb -(r1), #'@
+003064   001410                   25     	beq words4_equal
+003066   105721                   26     	tstb (r1)+
+003070   000770                   27     	br words1_equal
+003072                            28     words3_equal: ;failure
+003072   012602                   29     	mov (sp)+, r2
+003074   012601                   30     	mov (sp)+, r1
+003076   012766 000000 000006     31     	mov #0, 6(sp)
+003104   000207                   32     	rts pc
+                                  33     
+003106                            34     words4_equal: ;success
+003106   012602                   35     	mov (sp)+, r2
+003110   012601                   36     	mov (sp)+, r1
+003112   012766 000001 000006     37     	mov #1, 6(sp)
+003120   000207                   38     	rts pc
+                                  39     	
+                                  40     	
+                                  41     	
+                                  42     	
+003122                            43     .=torg+10000
+010000      100                   44     word1: .ascii <@>
+010001      100                   45     word2: .ascii <@>
+010002                            46     .even
+010002   000002                   47     equal_result: .word 2
+010004   000000                   48     strp: .word 0
+010006   000000                   49     f2_len: .word 0
+010010   000006                   50     length: .word 6
+010012      141                   51     Setmin: .ascii <a>
+010013      000                   52     .even
+010014      172                   53     Setmax: .ascii <z>
+010015      000                   54     .even
+010016      040                   55     Delim: .ascii < >
+
+
+	S Y M B O L   T A B L E
+	=======================
+
+SYMBOL    VALUE   TYPE
+------    -----   ----
+main      003000  text     
+equal_re  010002  text     
+word1     010000  text     
+word2     010001  text     
+wordsEqu  003036  text     
+words1_e  003052  text     
+words2_e  003060  text     
+words3_e  003072  text     
+words4_e  003106  text     
+strp      010004  text     
+f2_len    010006  text     
+length    010010  text     
+Setmin    010012  text     
+Setmax    010014  text     
+Delim     010016  text     

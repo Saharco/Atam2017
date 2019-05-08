@@ -1,0 +1,1519 @@
+Technion Computer Science Department -- PDP/11 X-Assembler Version (5.5) AA.
+
+
+	S O U R C E    F I L E    :    ex4.s11
+	======================================
+
+                                   1     ; Each definition here represents the known address of an apparatus for the interrupts' usage
+000000                             2     TKS = 177560
+000000                             3     TKB = 177562
+000000                             4     TPS = 177564
+000000                             5     TPB = 177566
+000000                             6     CLS = 177546
+000000                             7     IV_KEYBOARD = 60
+000000                             8     IV_CLOCK = 100
+                                   9     
+                                  10     
+000000                            11     . = torg + 3000
+003000                            12     main:				
+003000   010706                   13     					mov pc, sp
+003002   005746                   14     					tst -(sp) 						; initializing the stack pointer to its start (stack size is 3000 in octal)
+003004   012746 012004            15     					mov #Dict, -(sp)					; push the dictionary's address into the stack
+003010   012746 010026            16     					mov #dict_len, -(sp)				; push the address where the dictionary's length will be stored into the stack
+003014   004767 001102            17     					jsr pc, dictCalcLen				; enter the dictCalcLen subroutine to calculate the dictionary's size (and store it in the given address)
+003020   005726                   18     					tst (sp)+						; pop the length's address from the stack
+003022   005726                   19     					tst (sp)+						; pop the dictionary's address from the stack
+003024   012737 004452 000060     20     					mov #msgScan, @#IV_KEYBOARD		; defining the interrupt routine that will be put to use by the keyboard 
+003032   012737 000200 000062     21     					mov #200, @#IV_KEYBOARD+2		; defining the priority of the keyboard interrupt (=4)
+003040   012737 003710 000100     22     					mov #clock, @#IV_CLOCK			; defining the interrupt routine that will be put to use by the clock 
+003046   012737 000300 000102     23     					mov #300, @#IV_CLOCK+2			; defining the priority of the clock interrupt (=6)
+003054   004767 000134            24     					jsr pc, startGame				; enter the startGame subroutine to print the starting messages and receive the user input
+003060   013705 012002            25     					mov @#rate, r5					; r5 holds the current amount of ticks left for this second to pass
+003064   012737 000100 177546     26     					mov #100, @#CLS					; enable the clock apparatus to carry out interruptions
+003072   004767 000356            27     					jsr pc, scanEnable
+003076   012737 000101 177560     28     					mov #101, @#TKS					; enable the keyboard apparatus to carry out interruptions
+                                  29     
+003104   005737 010026            30     wait_sort:			tst @#dict_len
+003110   001405                   31     					beq check_time					; if the dictionary's EMPTY - do not sort it (does not make sense!). Instead, skip to check_time
+003112   012746 012004            32     					mov #Dict, -(sp)					; push the dictionary's address into the stack
+003116   004767 001064            33     					jsr pc, RevBubble				; it's sorting time!
+003122   005726                   34     					tst (sp)+						; pop the dictionary's address from the stack
+                                  35     
+003124   005737 010012            36     check_time:			tst @#msg_time					
+003130   001003                   37     					bne check_amount				; if the user is not out of time yet (msg_time > 0) - check the words limit
+003132   004767 000634            38     					jsr pc, timesUp					; the user is out of time: go to the timesUp subroutine to print the game's end messages
+003136   000414                   39     					br end_prog						; jump to the end
+                                  40     
+003140   005737 010010            41     check_amount:		tst @#msg_length
+003144   001003                   42     					bne check_dot					; if the user hasn't entered the required amount of words yet (msg_length > 0) - check the dot condition
+003146   004767 000560            43     					jsr pc, gameOver					; the user has entered all of the words: go to the gameOver subroutine to print the game's end messages
+003152   000406                   44     					br end_prog						; jump to the end
+                                  45     
+003154   005737 010042            46     check_dot:			tst @#flag_dot
+003160   001751                   47     					beq wait_sort					; if the user hasn't entered a dot in the last message (flag isn't equal to 1) - go back to the start and sort
+003162   004767 000544            48     					jsr pc, gameOver					; the user has entered all of the words: go to the gameOver subroutine to print the game's end messages
+003166   000400                   49     					br end_prog						; jump to the end
+                                  50     			
+003170   005737 010026            51     end_prog:			tst @#dict_len
+003174   001405                   52     					beq completed					; if the program's been finished with 0 words in the list: skip sorting them and end.
+003176   012746 012004            53     					mov #Dict, -(sp)					; push the dictionary's address into the stack
+003202   004767 001000            54     					jsr pc, RevBubble				; it's sorting time! one last time!
+003206   005726                   55     					tst (sp)+						; pop the dictionary's address from the stack
+003210   000000                   56     completed:			halt
+003212   000000                   57     					.word 0							; placeholder word with the same op_code as halt (just in case!)
+                                  58     					
+                                  59     										
+                                  60     
+                                  61     ; parameters: none.
+                                  62     ; return value: none.
+                                  63     ; prints the game's first display messages, and gets the input from the user for the game's duration and message's length
+                                  64     ; lnking register is pc
+003214                            65     startGame:
+003214   012746 010752            66     					mov #len_msg_str, -(sp)			; push the address of this message to the stack
+003220   004767 000112            67     					jsr pc, printSentence				; enter the printSentence subroutine to print the sentence that was delivered in the stack
+003224   005726                   68     					tst (sp)+						; pop the address of the message from the stack
+003226   004767 000162            69     					jsr pc, endLine					; enter the endLine subroutine in order to move to the next line
+003232   012746 010010            70     					mov #msg_length, -(sp)			; push the address of the length of the message to the stack (its default value is 0)
+003236   004767 000240            71     					jsr pc, readInput				; enter the readInput subroutine in order for the user to enter the value for the message's length
+003242   005726                   72     					tst (sp)+						; pop the address of the message length from the stack
+                                  73     					
+003244   012746 011016            74     					mov #secs_msg_str, -(sp)			; push the address of this message to the stack
+003250   004767 000062            75     					jsr pc, printSentence				; enter the printSentence subroutine to print the sentence that was delivered in the stack
+003254   005726                   76     					tst (sp)+						; pop the address of the message from the stack
+003256   004767 000132            77     					jsr pc, endLine					; enter the endLine subroutine in order to move to the next line
+003262   012746 010012            78     					mov #msg_time, -(sp)				; push the address of the total time for the message to the stack (its default value is 0)
+003266   004767 000210            79     					jsr pc, readInput				; enter the readInput subroutine in order for the user to enter the value for the total time of the message
+003272   005726                   80     					tst (sp)+						; pop the address of the time for the message from the stack
+                                  81     					
+003274   012746 011104            82     					mov #start1_msg_str, -(sp)		; push the address of this message to the stack
+003300   004767 000032            83     					jsr pc, printSentence				; enter the printSentence subroutine to print the sentence that was delivered in the stack
+003304   005726                   84     					tst (sp)+						; pop the address of the message from the stack
+003306   004767 000102            85     					jsr pc, endLine					; enter the endLine subroutine in order to move to the next line
+003312   012746 011151            86     					mov #start2_msg_str, -(sp)		; push the address of this message to the stack
+003316   004767 000014            87     					jsr pc, printSentence				; enter the printSentence subroutine to print the sentence that was delivered in the stack
+003322   005726                   88     					tst (sp)+						; pop the address of the message from the stack
+003324   004767 000064            89     					jsr pc, endLine					; enter the endLine subroutine in order to move to the next line
+003330   004767 000060            90     					jsr pc, endLine					; enter the endLine subroutine in order to move to the next line
+003334   000207                   91     					rts pc
+                                  92     
+                                  93     		
+                                  94     ; parameters:
+                                  95     ; address of the string to be printed in the stack
+                                  96     ; prints the sentence and then goes down to a new line (busy_wait)
+                                  97     ; return value: none
+                                  98     ; lniking register is pc
+003336                            99     printSentence:	
+003336   010046                  100     					mov r0, -(sp)					; we use this register: push the current value of r0 to the stack
+003340   016600 000004           101     					mov 4(sp), r0;					; move the address of the message string to r0
+003344   121027 000100           102     lp_len_msg:			cmpb (r0), #'@
+003350   001405                  103     					beq end_len_msg					; if r0 reached the terminator '@ - printing ends
+003352   112046                  104     					movb (r0)+, -(sp)				; push the current char in r0 into the stack and advance it to the next letter
+003354   004767 000016           105     					jsr pc, putChar					; enter the putChar subroutine to print the character in the stack
+003360   005726                  106     					tst (sp)+						; pop the character from the stack
+003362   000770                  107     					br lp_len_msg					; loop: print the next letter
+003364   105737 177564           108     end_len_msg:			tstb @#TPS
+003370   100375                  109     					bpl end_len_msg					; if "ready" bit is not set: wait for the last character to be printed
+003372   012600                  110     					mov (sp)+, r0					; pop r0's previous value from the stack, and restore it
+003374   000207                  111     					rts pc
+                                 112     					
+                                 113     					
+                                 114     ; parameters:
+                                 115     ; ascii value of the desired character to be printed
+                                 116     ; waits for the printer to stop being occupied (busy_wait), and then sends the character to TPB
+                                 117     ; return value: none.
+                                 118     ; linking register is pc
+003376                           119     putChar:
+003376   105737 177564           120     					tstb @#TPS
+003402   100375                  121     					bpl .-4							; if "ready" bit is not set: wait for the last character to be printed
+003404   116637 000002 177566    122     					movb 2(sp), @#TPB				; send the character to the printer buffer, and advance r0 to the next character
+003412   000207                  123     					rts pc
+                                 124     
+                                 125     					
+                                 126     ; parameters: none.
+                                 127     ; return value: none.
+                                 128     ; prints a new line.
+                                 129     ; linking register is pc
+003414                           130     endLine:				
+003414   010046                  131     					mov r0, -(sp)					; we use this register: push the current value of r0 to the stack
+003416   113746 010000           132     					movb @#LF, -(sp)				; push the ascii value for Line Feed into the stack
+003422   004767 177750           133     					jsr pc, putChar					; enter the putChar subroutine the print 'LF
+003426   005726                  134     					tst (sp)+						; pop the letter from the stack
+003430   113746 010001           135     					movb @#CR, -(sp)				; push the ascii value for Carriage Return into the stack
+003434   004767 177736           136     					jsr pc, putChar					; enter the putChar subroutine the print 'CR
+003440   005726                  137     					tst (sp)+						; pop the letter from the stack
+003442   105737 177564           138     					tstb @#TPS
+003446   100375                  139     					bpl .-4							; if "ready" bit is not set: wait for the last character to be printed
+003450   012600                  140     					mov (sp)+, r0					; pop r0's previous value from the stack, and restore it
+003452   000207                  141     					rts pc
+                                 142     					
+                                 143     
+                                 144     ; parameters: none.
+                                 145     ; return value: none.
+                                 146     ; prints "> " to inform the user that they may write their message
+                                 147     ; linking register is pc
+003454                           148     scanEnable:
+003454   113746 010005           149     					movb @#user_write, -(sp)			; push the ascii value of the input to the stack
+003460   004767 177712           150     					jsr pc, putChar					; enter the putChar subroutine to print the letter in the stack
+003464   005726                  151     					tst (sp)+						; pop the ascii value from the stack
+003466   113746 010003           152     					movb @#space, -(sp)				; push the ascii value of the input to the stack
+003472   004767 177700           153     					jsr pc, putChar					; enter the putChar subroutine to print the letter in the stack
+003476   005726                  154     					tst (sp)+						; pop the ascii value from the stack
+003500   000207                  155     					rts pc
+                                 156     
+                                 157     
+                                 158     					
+                                 159     ; parameters:
+                                 160     ; the address of the field that the user is assigning value to
+                                 161     ; requires to enter the value for the requested field. Note: field is a number
+                                 162     ; return: none.
+                                 163     ; linking register is pc
+003502                           164     readInput:
+003502   010046                  165     					mov r0, -(sp)					; we use this register: push the current value of r0 to the stack
+003504   010146                  166     					mov r1, -(sp)					; we use this register: push the current value of r1 to the stack
+003506   010246                  167     					mov r2, -(sp)					; we use this register: push the current value of r2 to the stack
+003510   016601 000010           168     					mov 10(sp), r1					; move the address of the result into r1
+003514   004767 177734           169     					jsr pc, scanEnable
+003520   005002                  170     					clr r2							; clear r2: the input's default size is 0
+003522   012737 000001 177560    171     loop_digits:		mov #1, @#TKS					; activate Read Enable for the keyboard apparatus
+003530   105737 177560           172     					tstb @#TKS
+003534   100375                  173     					bpl .-4							; there is no input: go back and wait for input
+003536   113700 177562           174     					movb @#TKB, r0					; move the input character into r0
+003542   042700 177600           175     					bic #177600, r0					; clear the irrelevant bits in r0 (ascii value is 7 bits, we assume success for input)
+003546   005702                  176     					tst r2
+003550   001003                  177     					bne legal_print					; if r2 is not 0 - it's legal to print anything (including backspace)
+003552   120037 010002           178     					cmpb r0, @#backspace
+003556   001761                  179     					beq loop_digits					; if r2 is 0 and backspace was entered: do not print the backspace! ignore and get the next letter
+003560   110046                  180     legal_print:			movb r0, -(sp)					; move the ascii value of the input to the stack
+003562   004767 177610           181     					jsr pc, putChar					; enter the putChar subroutine to print the letter in the stack
+003566   005726                  182     					tst (sp)+						; pop the ascii value from the stack
+003570   120037 010001           183     					cmpb r0, @#CR
+003574   001422                  184     					beq end_read_input				; if endline (<ENTER>) was entered: finish
+003576   120037 010002           185     					cmpb r0, @#backspace
+003602   001007                  186     					bne add_digit					; if backspace was entered: commence the deletion of the previously entered letter
+003604   004767 000052           187     					jsr pc, removeLastLetter			; enter the removeLastLetter subroutine to remove the previous letter
+003610   006211                  188     					asr (r1)
+003612   006211                  189     					asr (r1)
+003614   006211                  190     					asr (r1)						; remove the last digit from the composed number so far (e.g.: 24 to 2)
+003616   005302                  191     					dec r2							; increase the length of the input number thus far
+003620   000740                  192     					br loop_digits					; get the next letter
+003622                           193     add_digit:			; we assume that any letter other than backspace or enter is a valid digit!!
+003622   042700 000170           194     					bic #170, r0					; clear irrelevant bits: char to integer!
+003626   006311                  195     					asl (r1)
+003630   006311                  196     					asl (r1)
+003632   006311                  197     					asl (r1)						; move this value to its next power (e.g.: 2 to 20)
+003634   060011                  198     					add r0, (r1)					; add the received value to the number gathered so far
+003636   005202                  199     					inc r2							; increase the length of the input number thus far
+003640   000730                  200     					br loop_digits					; get the next letter
+003642   012602                  201     end_read_input:		mov (sp)+, r2					; pop r2's previous value from the stack, and restore it
+003644   012601                  202     					mov (sp)+, r1					; pop r1's previous value from the stack, and restore it
+003646   012600                  203     					mov (sp)+, r0					; pop r0's previous value from the stack, and restore it
+003650   004767 177540           204     					jsr pc, endLine					; enter the endLine subroutine in order to move to the next line
+003654   004767 177534           205     					jsr pc, endLine					; enter the endLine subroutine in order to move to the next line
+003660   000207                  206     					rts pc
+                                 207     
+                                 208     					
+                                 209     ; parameters: none.
+                                 210     ; return value: none.
+                                 211     ; removes the last letter printed (note: a backspace was already printed prior to entering this subroutine)	
+                                 212     ; linking register is pc				
+003662                           213     removeLastLetter:
+003662   113746 010003           214     					movb @#space, -(sp)				; push the ascii value for an empty space into the stack
+003666   004767 177504           215     					jsr pc, putChar					; enter the putChar subroutine to print the letter in the stack
+003672   005726                  216     					tst (sp)+						; pop the letter from the stack
+003674   113746 010002           217     					movb @#backspace, -(sp)			; push the ascii value for a backspace into the stack	
+003700   004767 177472           218     					jsr pc, putChar					; enter the putChar subroutine to print the letter in the stack
+003704   005726                  219     					tst (sp)+						; pop the letter from the stack
+003706   000207                  220     					rts pc
+                                 221     				
+                                 222     				
+003710                           223     clock:
+003710   005705                  224     					tst r5							; r5 holds the amount of ticks left for this second throughout the program!
+003712   001005                  225     					bne tick_ok						; if there are more than 0 ticks left for this second - go to tick_ok
+003714   013705 012002           226     					mov @#rate, r5					; re-apply r5 with the clock's ticking rate
+003720   005337 010012           227     					dec @#msg_time					; decrement one second from the total time
+003724   000400                  228     					br .+2							; skip the next instruction, and go to the end!
+003726   005305                  229     tick_ok:				dec r5							; decrement one tick from r5
+003730   000002                  230     					rti
+                                 231     					
+                                 232     					
+                                 233     					
+                                 234     ; parameters: none.
+                                 235     ; return value: none.
+                                 236     ; prints the end of game (success run) messages, along with the results.
+                                 237     ; linking register is pc					
+003732                           238     gameOver:
+003732   005037 177560           239     					clr @#TKS						; disable interrupt / writing
+003736   004767 177452           240     					jsr pc, endLine
+003742   004767 177446           241     					jsr pc, endLine
+003746   012746 011503           242     					mov #done1_msg_str, -(sp)
+003752   004767 177360           243     					jsr pc, printSentence				; print the first endgame message (successful run)
+003756   005726                  244     					tst (sp)+
+003760   004767 177430           245     					jsr pc, endLine
+003764   004767 000042           246     					jsr pc, gameResults				; print the game's results
+003770   000207                  247     					rts pc
+                                 248     
+                                 249     					
+                                 250     ; parameters: none.					
+                                 251     ; return value: none.
+                                 252     ; prints the end of game (failure run: out of time) messages, along with the results.
+                                 253     ; linking register is pc						
+003772                           254     timesUp:
+003772   005037 177560           255     					clr @#TKS						; disable interrupt / writing
+003776   004767 177412           256     					jsr pc, endLine
+004002   004767 177406           257     					jsr pc, endLine
+004006   012746 011461           258     					mov #times_up_msg_str, -(sp)		; print the second endgame message (out of time)
+004012   004767 177320           259     					jsr pc, printSentence
+004016   005726                  260     					tst (sp)+
+004020   004767 177370           261     					jsr pc, endLine
+004024   004767 000002           262     					jsr pc, gameResults				; print the game's results
+004030   000207                  263     					rts pc
+                                 264     
+                                 265     
+                                 266     ; parameters: none.
+                                 267     ; return value: none.
+                                 268     ; prints some constant strings to the string as well as the final user's message to inform about the end of the game					
+                                 269     ; linking register is pc
+004032                           270     gameResults:			
+004032   012746 011243           271     					mov #show1_msg_str, -(sp)
+004036   004767 177274           272     					jsr pc, printSentence
+004042   005726                  273     					tst (sp)+
+004044   105737 010202           274     					tstb @#message
+004050   001405                  275     					beq skip_msg						; if the message is empty (user hasn't written anything) - skip printing it.
+004052   012746 010202           276     					mov #message, -(sp)
+004056   004767 177254           277     					jsr pc, printSentence
+004062   005726                  278     					tst (sp)+
+004064   012746 011265           279     skip_msg:			mov #show2_msg_str, -(sp)
+004070   004767 177242           280     					jsr pc, printSentence
+004074   005726                  281     					tst (sp)+
+004076   004767 177312           282     					jsr pc, endLine
+004102   012746 011516           283     					mov #done2_msg_str, -(sp)
+004106   004767 177224           284     					jsr pc, printSentence
+004112   005726                  285     					tst (sp)+
+004114   004767 177274           286     					jsr pc, endLine
+004120   000207                  287     					rts pc
+                                 288     					
+                                 289     
+                                 290     ; parameters:
+                                 291     ; address of the list's first node in the stack,
+                                 292     ; address of the dictionary's size in the stack
+                                 293     ; calculutes the dictionary's size, and stores that value in the given address
+                                 294     ; return value: none.
+                                 295     ; linking register is pc
+004122                           296     dictCalcLen:
+004122   010046                  297     					mov r0, -(sp)					; we use this register: push the current value of r0 to the stack
+004124   016600 000006           298     					mov 6(sp), r0					; move the dictionary's first node's address to r0
+004130   127067 000000 173642    299     lp_all_nodes:		cmpb @(r0), 0
+004136   001421                  300     					beq dict_end						; if the string's value is 0 (empty word) - end here
+004140   127027 000000 000100    301     					cmpb @(r0), #'@
+004146   001415                  302     					beq dict_end						; if the string's value is '@ (terminator) - end here
+004150   005276 000004           303     					inc @4(sp)						; it's a valid node: increment the dict's length
+004154   127067 000000 173616    304     					cmpb @(r0), 0					
+004162   001407                  305     					beq dict_end						; if the address of the next node is 0 (NIL) - end here
+004164   127027 000000 000100    306     					cmpb @(r0), #'@
+004172   001403                  307     					beq dict_end						; if the address of the next node is '@ (terminator) - end here.
+004174   016000 000002           308     					mov 2(r0), r0					; move the value in the address of r0 to r0: r0 now holds the address of the next node
+004200   000753                  309     					br lp_all_nodes					; loop back with the next node's address in r0
+004202   012600                  310     dict_end:			mov (sp)+, r0					; pop r0's previous value from the stack, and restore it
+004204   000207                  311     					rts pc
+                                 312     
+                                 313     
+                                 314     ; when we enter this subroutine:	r3 is modifiable,
+                                 315     ;									r2 is modifiable.
+                                 316     ;									the address of the dictionary is in the stack
+                                 317     ; return value: none.
+                                 318     ; the subroutine sorts the dictionary, assuming there might be one un-sorted member at its end
+                                 319     ; linking register is pc
+004206                           320     RevBubble:
+004206   016603 000002           321     					mov 2(sp), r3					; mov the current node's address to r3
+004212   005737 010030           322     					tst @#flag_first_node
+004216   001004                  323     					bne next_node					; if the current node is not the first node - keep going through the list
+004220   005237 010030           324     					inc @#flag_first_node				; this is the first node: activate the flag
+004224   010346                  325     					mov r3, -(sp)					; push the node to the stack (so we can utilize its address later)
+004226   000415                  326     					br recursion						; skip to the recursion with the first node already in the stackk
+004230   016302 000002           327     next_node:			mov 2(r3), r2					; r2 holds the next node
+004234   005702                  328     					tst r2
+004236   001414                  329     					beq bubble						; if the next node is NULL - we've reachd the end
+004240   005762 000002           330     					tst 2(r2)
+004244   001411                  331     					beq bubble						; if the next node's next node is NULL - we've reached the end (stop condition is one before last)
+004246   017202 000002           332     					mov @2(r2), r2					; r2 holds the address of the string of the node that comes after the next node
+004252   105712                  333     					tstb (r2)
+004254   001405                  334     					beq bubble						; if r2 is 0 - we've reached the last node in the list (except maybe the newly added one): go to bubble
+004256   016346 000002           335     					mov 2(r3), -(sp)				; push the next node to the stack
+004262   004767 177720           336     recursion:			jsr pc, RevBubble				; recursive entry to the subroutine: keep going through the nodes until we've reached the desired stop
+004266   012603                  337     					mov (sp)+, r3					; pop the node from the stack, and assign it to r3!
+004270   005037 010030           338     bubble:				clr @#flag_first_node				; clear the flag (for later usage)
+004274   005746                  339     					tst -(sp)						; save a spot in the stack for the result from the isLexiBigger subroutine
+004276   011346                  340     					mov (r3), -(sp)					; push the current node's string to the stack
+004300   017346 000002           341     					mov @2(r3), -(sp)				; push the next node's string to the stack
+004304   004767 000030           342     					jsr pc, isLexiBigger				; enter the isLexiBigger subroutine, to determine whether or not the first string entered to the stack is lexicoraphically bigger
+004310   005726                  343     					tst (sp)+						; pop the second string from the stack
+004312   005726                  344     					tst (sp)+						; pop the first string from the stack
+004314   005726                  345     					tst (sp)+						; pop the result of the subroutine from the stack, and change the PSW flags accordingly
+004316   001407                  346     					beq sorted						; if the result is 0: the dictionary is sorted! go to sorted
+                                 347     					; the list is not sorted! we'll swap the two strings (of the current node and the next one)
+004320   016346 000002           348     					mov 2(r3), -(sp)				; move the next node's address to the stack
+004324   010346                  349     					mov r3, -(sp)					; move the current node's address to the stack
+004326   004767 000066           350     					jsr pc, swapAddress				; enter the swapAddress subroutine, in order to swap the addresses of the nodes' strings
+004332   005726                  351     					tst (sp)+						; pop the string from the stack
+004334   005726                  352     					tst (sp)+						; pop the string from the stack
+004336   000207                  353     sorted:				rts pc
+                                 354     					
+                                 355     		
+                                 356     
+                                 357     ; parameters:
+                                 358     ; result address
+                                 359     ; first string in the stack,
+                                 360     ; second string in the stack
+                                 361     ; return value: returns 1 if the first string is lexicoraphically bigger than the second string, and 0 otherwise.
+                                 362     ; result is stored in the result address pushed to the stack.
+                                 363     ; linking register is pc
+004340                           364     isLexiBigger:
+004340   010046                  365     					mov r0, -(sp)					; we use this register: push the current value of r0 to the stack
+004342   010146                  366     					mov r1, -(sp)					; we use this register: push the current value of r1 to the stack
+004344   016600 000010           367     					mov 10(sp), r0					; the address of the first string entered to the stack is stored in r0
+004350   016601 000006           368     					mov 6(sp), r1					; the address of the second string entered to the stack is stored in r1
+004354   005066 000012           369     					clr 12(sp)
+004360   121027 000100           370     loop_lexi:			cmpb (r0), #'@
+004364   001412                  371     					beq end_lexi						; if our first string reached its end - it's not bigger than the second string. Go to the end
+004366   121127 000100           372     					cmpb (r1), #'@
+004372   001405                  373     					beq end_lexi-4					; if our first string hasn't reached its end and the second one did - return 1, and then end
+004374   121011                  374     					cmpb (r0), (r1)
+004376   003003                  375     					bgt end_lexi-4					; if (r1[current] > r2[current]) - the first string is bigger than the seccond string, so return 1 and then end
+004400   122021                  376     					cmpb (r0)+, (r1)+			
+004402   002403                  377     					blt end_lexi						; if (r1[current] < r2[current]) - the first string is not bigger than the second string. Go to the end
+004404   000765                  378     					br loop_lexi					; the characters are equal! Check the next ones
+004406   005266 000012           379     					inc 12(sp)						; the first string delivered to the stack is bigger - return 1
+004412   012601                  380     end_lexi:			mov (sp)+, r1					; pop r1's previous value from the stack, and restore it
+004414   012600                  381     					mov (sp)+, r0					; pop r0's previous value from the stack, and restore it
+004416   000207                  382     					rts pc		
+                                 383     		
+                                 384     
+                                 385     
+                                 386     ; parameters:
+                                 387     ; first node address in the stack,
+                                 388     ; second node address in the stack
+                                 389     ; return value: none.
+                                 390     ; swaps the strings' fields in the nodes
+                                 391     ; linking register is pc
+004420                           392     swapAddress:
+004420   010046                  393     					mov r0, -(sp)
+004422   010146                  394     					mov r1, -(sp)
+004424   017600 000006           395     					mov @6(sp), r0
+004430   017601 000010           396     					mov @10(sp), r1
+004434   010176 000006           397     					mov r1, @6(sp)
+004440   010076 000010           398     					mov r0, @10(sp)
+004444   012601                  399     					mov (sp)+, r1
+004446   012600                  400     					mov (sp)+, r0
+004450   000207                  401     					rts pc
+                                 402     					
+                                 403     					
+                                 404     
+                                 405     					
+                                 406     ; keyboard interrupt's subroutine service
+                                 407     ; gets the user's letter from the TKB and either adds it to the message, or chooses a procedure (add word / complete word)
+                                 408     ; if the user has entered "!" or " ". In the case that the user has entered '.' - a flag will be raised and we exit the subroutine.
+004452                           409     msgScan:
+004452   010046                  410     					mov r0, -(sp)					; we use this register: push the current value of r0s to the stack
+004454   010146                  411     					mov r1, -(sp)					; we use this register: push the current value of r1 to the stack
+004456   012701 010032           412     					mov #curr_char_add, r1			; r1: address of last entered char
+004462   113700 177562           413     					movb @#TKB, r0 					; r0: current char
+004466   042700 177600           414     					bic #177600, r0					; clear the irrelevant bits in r0 (ascii value is 7 bits, we assume success for input)
+004472   120037 010001           415     					cmpb r0, @#CR
+004476   001466                  416     					beq end_scan						; if the letter is <ENTER> - dont print it, skip to the end.
+004500   120027 000100           417     					cmpb r0, #'@
+004504   001463                  418     					beq end_scan						; if the letter is '@' - dont print it, skip to the end.
+004506   120037 010002           419     					cmpb r0, @#backspace
+004512   001003                  420     					bne chk_space					; if the letter isn't backspace - check if it's a space
+004514   021127 010052           421     					cmp (r1), #curr_word				; the letter is a backspace: check if we're on the first letter
+004520   001455                  422     					beq end_scan						; if we're on the first letter - do not print backspace. Skip to the end
+004522   120037 010003           423     chk_space:			cmpb r0, @#space
+004526   001006                  424     					bne chk_exc_mark				; if the letter isn't space - check if it's '!'
+004530   112771 000100 000000    425     					movb #'@, @(r1)					; the letter is space: terminate the word and...
+004536   004767 001604           426     					jsr pc, addToDict				; enter the addToDict subroutine in order to add this word to the list and the message.
+004542   000447                  427     					br end_scan+6					; skip to the end (do not enable the interrupt: it might not be legal to write anymore)
+                                 428     					
+004544   120037 010004           429     chk_exc_mark:		cmpb r0, @#exc_mark
+004550   001006                  430     					bne chk_dot						; if the letter isn't '!' - check if it's '.'
+004552   112771 000100 000000    431     					movb #'@, @(r1)					; the letter is '!': terminate the word and...
+004560   004767 000104           432     					jsr pc, suggestWords				; enter the suggestWords subroutine in order to auto-complete the word.
+004564   000436                  433     					br end_scan+6					; skip to the end (do not enable the interrupt: it might not be legal to write anymore)
+                                 434     					
+004566   120027 000056           435     chk_dot:			cmpb r0, #'.
+004572   001007                  436     					bne valid_scan					; if the letter isn't '.' - we've checked all the special characters. It's a valid print!
+004574   005237 010042           437     					inc @#flag_dot					; the letter is '.', so activate the flag
+004600   110046                  438     					movb r0, -(sp)
+004602   004767 176570           439     					jsr pc, putChar					; print the dot...
+004606   005726                  440     					tst (sp)+
+004610   000424                  441     					br end_scan+6					; skip to the end (do not enable the interrupt: it might not be legal to write anymore)
+                                 442     					
+004612   110046                  443     valid_scan:			movb r0, -(sp)
+004614   004767 176556           444     					jsr pc, putChar					; print the character that the user entered
+004620   005726                  445     					tst (sp)+
+004622   120037 010002           446     					cmpb r0, @#backspace				
+004626   001007                  447     					bne add_char
+004630   004767 177026           448     					jsr pc, removeLastLetter			; if the letter was backspace: remove the last letter!
+004634   112771 000000 000000    449     					movb #0, @(r1)
+004642   005311                  450     					dec (r1)						; decrease the current character pointer in the current word by one
+004644   000403                  451     					br end_scan						; jump to the end
+004646   110071 000000           452     add_char:			movb r0, @(r1)					; add the letter to the current word
+004652   005211                  453     					inc (r1)						; increase the pointer to the current letter by one
+004654   012737 000101 177560    454     end_scan:			mov #101, @#TKS					; enable the keyboard to carry out interrupts again
+004662   012601                  455     					mov (sp)+, r1					; restore the registers' values
+004664   012600                  456     					mov (sp)+, r0
+004666   000002                  457     					rti
+                                 458     					
+                                 459     
+                                 460     ; parameters: none.
+                                 461     ; return value: none.
+                                 462     ; suggests all the possible words in the list that the user-entered word is a X-mistake prefix of, from 0 mistakes to X mistakes and in lexicographic order!
+                                 463     ; linking register is pc.					
+004670                           464     suggestWords:
+004670   010046                  465     					mov r0, -(sp)
+004672   010146                  466     					mov r1, -(sp)
+004674   010246                  467     					mov r2, -(sp)
+004676   010346                  468     					mov r3, -(sp)
+004700   010446                  469     					mov r4, -(sp)
+004702   012701 010052           470     					mov #curr_word, r1				; r1 holds the target prefix (word that the user entered)
+004706   005002                  471     					clr r2							; r2 holds the current amount of mistakes we're trying to find matches for (starting from 0 and moving to X)
+004710   013703 012000           472     					mov @#X, r3
+004714   012704 012004           473     					mov #Dict, r4					; r4 holds the address of the current node
+004720   005203                  474     					inc r3							; r3 - X+1
+004722   005067 003110           475     					clr flag_suggest					; clear the flag...
+004726   011400                  476     loop_words:			mov (r4), r0					; r0 holds the current node's string's address
+004730   105710                  477     					tstb (r0)
+004732   001450                  478     					beq add_mistake					; if we've reached an empty word: try again with more mistakes
+004734   005746                  479     					tst -(sp)
+004736   004767 002242           480     					jsr pc, isPrefix					; enter the isPrefix subroutine to check if the values (in register) are a match (prefix of the word with the desired amount of mista
+004742   005726                  481     					tst (sp)+					
+004744   001435                  482     					beq try_next					; if the result of the subroutine is 0 - skip to try_next, and try again with the next word
+004746   005237 010036           483     					inc @#flag_suggest				; we found a match! activate the flag to indicate that there was a match
+004752   005746                  484     					tst -(sp)
+004754   010246                  485     					mov r2, -(sp)
+004756   010046                  486     					mov r0, -(sp)
+004760   004767 000270           487     					jsr pc, wordSuggestion			; enter the wordSuggestion subroutine to inform the user about this completion, and check if he accepts it
+004764   005726                  488     					tst (sp)+
+004766   005726                  489     					tst (sp)+
+004770   012600                  490     					mov (sp)+, r0					; the result of the subroutine is moved into r0
+004772   005700                  491     					tst r0
+004774   001421                  492     					beq try_next					; if the result is 0 - the user hasn't picked this completion. Try again with the next word
+004776   005700                  493     					tst r0
+005000   003117                  494     					bgt end_suggest_words				; if the result is 1 - the user picked this completion! Skip to the end
+                                 495     					; User entered '!' again during the completion phase
+005002   004767 176406           496     					jsr pc, endLine
+005006   004767 001706           497     					jsr pc, printTime				; print the time left for the writing of the message
+005012   004767 176436           498     					jsr pc, scanEnable				; print "> "...
+005016   012746 010052           499     					mov #curr_word, -(sp)
+005022   004767 176310           500     					jsr pc, printSentence				; and then print the word that the user has wrote before trying to auto-complete it
+005026   005726                  501     					tst (sp)+
+005030   012737 000101 177560    502     					mov #101, @#TKS					; allow the keyboard to carry out interrupts
+005036   000500                  503     					br end_suggest_words				; skip to the end
+                                 504     					
+005040   005764 000002           505     try_next:			tst 2(r4)
+005044   001403                  506     					beq add_mistake					; if the next node is NULL - try again with more mistakes
+005046   016404 000002           507     					mov 2(r4), r4					; r4 holds the address of the next node
+005052   000725                  508     					br loop_words					; jump back to iteratre over the list's words
+005054   005202                  509     add_mistake:			inc r2							; increase the current amount of mistakes we're checking matches for by 1
+005056   012704 012004           510     					mov #Dict, r4					; initialize the current node to be the first one
+005062   077357                  511     					sob r3, loop_words				; if r3 isn't 0 yet - jump back to iterate over the list's words
+                                 512     					;USER DIDN'T PICK ANYTHING - CHECKK FLAG_SUGGEST
+005064   004767 176324           513     					jsr pc, endLine
+005070   012746 011270           514     					mov #err_msg_str, -(sp)
+005074   004767 176236           515     					jsr pc, printSentence
+005100   005726                  516     					tst (sp)+
+005102   012746 010052           517     					mov #curr_word, -(sp)
+005106   004767 176224           518     					jsr pc, printSentence
+005112   005726                  519     					tst (sp)+
+005114   005737 010036           520     					tst @#flag_suggest
+005120   001024                  521     					bne didnt_pick
+005122   012746 011300           522     					mov #err1_msg_str, -(sp)
+005126   004767 176204           523     					jsr pc, printSentence
+005132   005726                  524     					tst (sp)+
+005134   004767 176254           525     					jsr pc, endLine
+005140   004767 001554           526     					jsr pc, printTime
+005144   004767 176304           527     					jsr pc, scanEnable
+005150   012746 010052           528     					mov #curr_word, -(sp)
+005154   004767 176156           529     					jsr pc, printSentence
+005160   005726                  530     					tst (sp)+
+005162   012737 000101 177560    531     					mov #101, @#TKS
+005170   000423                  532     					br end_suggest_words
+005172   012746 011331           533     didnt_pick:			mov #err2_msg_str, -(sp)
+005176   004767 176134           534     					jsr pc, printSentence
+005202   005726                  535     					tst (sp)+
+005204   004767 176204           536     					jsr pc, endLine
+005210   004767 001504           537     					jsr pc, printTime
+005214   004767 176234           538     					jsr pc, scanEnable
+005220   012746 010052           539     					mov #curr_word, -(sp)
+005224   004767 176106           540     					jsr pc, printSentence
+005230   005726                  541     					tst (sp)+
+005232   012737 000101 177560    542     					mov #101, @#TKS
+005240   012604                  543     end_suggest_words:	mov (sp)+, r4
+005242   012603                  544     					mov (sp)+, r3
+005244   012602                  545     					mov (sp)+, r2
+005246   012601                  546     					mov (sp)+, r1
+005250   012600                  547     					mov (sp)+, r0
+005252   000207                  548     					rts pc
+                                 549     		
+                                 550     ; parameters: an address in the stack to assign the result to, the current amount of mistakes for this word and the address of the auto-completion word
+                                 551     ; displays the auto-completion option to the user (with different displays for a perfect and non-perfect completion) and waits for the user to choose if they w
+                                 552     ; return value: 1 if the user has picked the auto-completion, 0 if the user hasn't picked it and -1 if the user wants to stop the auto-completion process compl
+                                 553     ; linking register is pc.
+005254                           554     wordSuggestion:
+005254   010046                  555     					mov r0, -(sp)
+005256   010146                  556     					mov r1, -(sp)
+005260   010246                  557     					mov r2, -(sp)
+005262   005066 000014           558     					clr 14(sp)						; result
+005266   016600 000010           559     					mov 10(sp), r0					; word address
+005272   016602 000012           560     					mov 12(sp), r2					; X
+005276   012701 010126           561     					mov #curr_suggestion, r1			; current word
+005302   121027 000100           562     loop_update_word:	cmpb (r0), #'@
+005306   001402                  563     					beq end_update
+005310   112021                  564     					movb (r0)+, (r1)+				; copy hte value in the word address to the current suggestion address
+005312   000773                  565     					br loop_update_word
+005314   112711 000100           566     end_update:			movb #'@, (r1)					; terminate the current suggestion string
+005320   004767 176070           567     					jsr pc, endLine
+005324   005702                  568     					tst r2
+005326   001006                  569     					bne has_mistake					; check if X isn't equal to 0. If so, there is are mistakes, and a different message should be displayed to the user
+005330   005746                  570     					tst -(sp)
+005332   004767 000256           571     					jsr pc, perfectPrefixSuggest		; enter the perfectPrefixSuggest subroutine in order to inform the user of this word completion
+005336   012666 000014           572     					mov (sp)+, 14(sp)				; assign the result of the subroutine to be the result of this subroutine
+005342   000442                  573     					br suggest_end					; skip to the end
+005344                           574     has_mistake:			; there are mistkaes - display the correct constant strings to the user in order to inform him:
+005344   012746 011407           575     					mov #fix1_msg_str, -(sp)
+005350   004767 175762           576     					jsr pc, printSentence
+005354   005726                  577     					tst (sp)+
+005356   012746 010126           578     					mov #curr_suggestion, -(sp)
+005362   004767 175750           579     					jsr pc, printSentence
+005366   005726                  580     					tst (sp)+
+005370   012746 011425           581     					mov #fix2_msg_str, -(sp)
+005374   004767 175736           582     					jsr pc, printSentence
+005400   005726                  583     					tst (sp)+
+005402   005746                  584     					tst -(sp)
+005404   012746 000156           585     					mov #'n, -(sp)					; "user didn't pick" value is 'n
+005410   012746 000171           586     					mov #'y, -(sp)					; "user picked" value is 'y
+005414   012746 000077           587     					mov #'?, -(sp)					; the flickering letter is '?
+005420   004767 000034           588     					jsr pc, flickerPrint				; go to the flickerPrint subroutine in order to flicker the last letter in the message as we wait for response from the user
+005424   005726                  589     					tst (sp)+
+005426   005726                  590     					tst (sp)+
+005430   005726                  591     					tst (sp)+
+005432   012666 000014           592     					mov (sp)+, 14(sp)				; move the result of the subroutine to be the result of this subroutine
+005436   005766 000014           593     					tst 14(sp)
+005442   003402                  594     					ble suggest_end					; if the result is 0 or -1 - user didn't pick the word, so skip to the end
+005444   004767 000464           595     					jsr pc, addNotDict				; otherwise, the result is 1 so the user picked it: add to the message (but not to the dictionary!)
+005450   012602                  596     suggest_end:			mov (sp)+, r2
+005452   012601                  597     					mov (sp)+, r1
+005454   012600                  598     					mov (sp)+, r0
+005456   000207                  599     					rts pc
+                                 600     			
+                                 601     
+                                 602     ; parameters: address for the result in the stack, a letter that signifies that the user hasn't picked the word, a letter that signifies that the user has pick
+                                 603     ; flickers the last letter back and forth until an acceptable input has been entered by the user (picked the auto-completion, didnt pick it, or stopping the au
+                                 604     ; return value: 1 if the user has picked the auto-completion, 0 if the user hasn't picked it and -1 if the user wants to stop the auto-completion process compl
+                                 605     ; linking register is pc.		
+005460                           606     flickerPrint:
+005460   010046                  607     					mov r0, -(sp)
+005462   005066 000012           608     					clr 12(sp)						; clear the result value in the stack (default = 0)
+005466   012737 000001 177560    609     					mov #1, @#TKS					; enable the user to write on the keyboard
+005474   105737 177560           610     loop_boop:			tstb @#TKS
+005500   100415                  611     					bmi	got_char						; if there is an input: stop flickering
+005502   113746 010002           612     					movb @#backspace, -(sp)			; push backspace into the stack to be printed
+005506   004767 175664           613     					jsr pc, putChar					; enter the putChar subroutine to print the letter in the stack
+005512   005726                  614     					tst (sp)+						; pop the letter from the stack
+005514   004767 176142           615     					jsr pc, removeLastLetter			; enter the removeLastLetter subroutine to remove the previous letter
+005520   116646 000004           616     					movb 4(sp), -(sp)				; push the letter that was sent to this function into the stack to be printed
+005524   004767 175646           617     					jsr pc, putChar					; enter the putChar subroutine to print the letter in the stack
+005530   005726                  618     					tst (sp)+						; pop the letter from the stack
+005532   000760                  619     					br loop_boop					; go back to loop boop and wait for the input!
+005534   113700 177562           620     got_char:			movb @#TKB, r0					; when we get here - there is a letter inside TKB. Assign it to r0
+005540   120066 000006           621     					cmpb r0, 6(sp)
+005544   001003                  622     					bne chk_no						; if the letter isn't "user picked" as entered in the stack - check if it's "user didn't pick"
+005546   005266 000012           623     					inc 12(sp)						; The user picked the suggested word! Assign 1 as the result value form this subroutien
+005552   000416                  624     					br end_flicker					; go to the end
+005554   120066 000010           625     chk_no:				cmpb r0, 10(sp)
+005560   001413                  626     					beq end_flicker					; if the letter is "user didn't pick" as entered in the stack - end with the default result (0, user didn't pick the suggesteded word)
+005562   120027 000041           627     chk_stop:			cmpb r0, #'!
+005566   001004                  628     					bne invalid_char					; if the letter isn't "user picked" / "user didn't pick" / '! - it's an invalid character, so keep waiting for a valid one
+005570   012766 177777 000012    629     					mov #-1, 12(sp)					; the user entered '!. Assign -1 as the result value from this subroutine
+005576   000404                  630     					br end_flicker					; go to the end
+                                 631     
+005600   012737 000001 177560    632     invalid_char:		mov #1, @#TKS					; enable the user to write on the keyboard again as we wait for a valid character
+005606   000732                  633     					br loop_boop					; keep displaying the flicked message
+005610   012600                  634     end_flicker:			mov (sp)+, r0
+005612   000207                  635     					rts pc
+                                 636     
+                                 637     					
+                                 638     
+                                 639     ; parameters: an address in the stack to assign the result to, the current amount of mistakes for this word and the address of the perfet auto-completion word
+                                 640     ; displays the perfect auto-completion option to the user and waits for the user to choose if they want this completion to be added to the message
+                                 641     ; return value: 1 if the user has picked the auto-completion, 0 if the user hasn't picked it and -1 if the user wants to stop the auto-completion process compl
+                                 642     ; linking register is pc.					
+005614                           643     perfectPrefixSuggest:
+005614   010046                  644     					mov r0, -(sp)
+005616   012700 010126           645     					mov #curr_suggestion, r0			; move the current word suggestion address to r0
+005622   010046                  646     					mov r0, -(sp)
+005624   004767 175506           647     					jsr pc, printSentence
+005630   005726                  648     					tst (sp)+
+005632                           649     lp_last_char:		; advance r0 to the last letter in the word
+005632   122027 000100           650     					cmpb (r0)+, #'@
+005636   001375                  651     					bne lp_last_char
+005640   105740                  652     					tstb -(r0)						; move r0 back to the terminator '@
+005642   114000                  653     					movb -(r0), r0					; move the value of the letter before the terminator '@ (last letter in the word) to r0
+005644   005746                  654     					tst -(sp)
+005646   113746 010001           655     					movb @#CR, -(sp)				; "user didn't pick" value is <ENTER>
+005652   113746 010003           656     					movb @#space, -(sp)				; "user picked" value is space
+005656   110046                  657     					movb r0, -(sp)					; the letter to be flickered in the last letter in the word, as stored in r0
+005660   004767 177574           658     					jsr pc, flickerPrint				; go to the flickerPrint subroutine in order to flicker the last letter in the message as we wait for response from the user
+005664   005726                  659     					tst (sp)+
+005666   005726                  660     					tst (sp)+
+005670   005726                  661     					tst (sp)+
+005672   012666 000004           662     					mov (sp)+, 4(sp)				; move the result of the subroutine to be the result of this subroutine
+005676   005766 000004           663     					tst 4(sp)
+005702   003402                  664     					ble end_perfect					; if the result is 0 or -1 - user didn't pick the word, so skip to the end
+005704   004767 000224           665     					jsr pc, addNotDict				; otherwise, the result is 1 - so add it to the message (but not to the list!)
+005710   012600                  666     end_perfect:			mov (sp)+, r0
+005712   000207                  667     					rts pc
+                                 668     		
+                                 669     
+                                 670     ; parameters: none.
+                                 671     ; return value: none.
+                                 672     ; adds the word in the curr_word address to the message string (concat strings!)
+                                 673     ; linking register is pc	
+005714                           674     concat:
+005714   010046                  675     					mov r0, -(sp)
+005716   010146                  676     					mov r1, -(sp)
+005720   012700 010052           677     					mov #curr_word, r0				; move the current word's address to r0
+005724   012701 010034           678     					mov #curr_msg_char_add, r1		; move the address that contains the pointer to the last letter in the message to r1
+005730   022711 010202           679     					cmp #message, (r1)				; check if the last letter in the message is the first message in the letter (our message is empty so far!)
+005734   001404                  680     					beq loop_concat					; if it is - skip the next part and go to the loop
+005736   113771 010003 000000    681     					movb @#space, @(r1)				; change the terminator '@ that existed in this address to be space
+005744   005211                  682     					inc (r1)						; increase the pointer by one
+005746   121027 000100           683     loop_concat:		cmpb (r0), #'@
+005752   001404                  684     					beq concat_end					; if r0 has reached the end of the word - we're done
+005754   112071 000000           685     					movb (r0)+, @(r1)				; move the current letter in r0 to the desired position in the message, and advance r0
+005760   005211                  686     					inc (r1)						; advance r1
+005762   000771                  687     					br loop_concat
+005764   112771 000100 000000    688     concat_end:			movb #'@, @(r1)					; terminate the message
+005772   012601                  689     					mov (sp)+, r1
+005774   012600                  690     					mov (sp)+, r0
+005776   000207                  691     					rts pc
+                                 692     		
+                                 693     ; parameters: none.
+                                 694     ; return value: none.
+                                 695     ; adds the word in the curr_suggestion address to the message string (concat strings!)
+                                 696     ; linking register is pc			
+006000                           697     concat2:
+006000   010046                  698     					mov r0, -(sp)
+006002   010146                  699     					mov r1, -(sp)
+006004   012700 010126           700     					mov #curr_suggestion, r0
+006010   012701 010034           701     					mov #curr_msg_char_add, r1
+006014   022711 010202           702     					cmp #message, (r1)
+006020   001404                  703     					beq lp2_concat
+006022   113771 010003 000000    704     					movb @#space, @(r1)
+006030   005211                  705     					inc (r1)
+006032   121027 000100           706     lp2_concat:			cmpb (r0), #'@
+006036   001404                  707     					beq concat2_end
+006040   112071 000000           708     					movb (r0)+, @(r1)
+006044   005211                  709     					inc (r1)
+006046   000771                  710     					br lp2_concat
+006050   112771 000100 000000    711     concat2_end:			movb #'@, @(r1)
+006056   012601                  712     					mov (sp)+, r1
+006060   012600                  713     					mov (sp)+, r0
+006062   000207                  714     					rts pc
+                                 715     		
+                                 716     ; parameters: none.
+                                 717     ; return value: none.
+                                 718     ; clears the current word (and current suggestion), and the pointers to their current letters for later usage
+                                 719     ; linking register is pc.		
+006064                           720     clearWord:
+006064   010046                  721     					mov r0, -(sp)
+006066   010146                  722     					mov r1, -(sp)
+006070   012700 010052           723     					mov #curr_word, r0
+006074   013701 010040           724     					mov @#curr_max_size, r1
+006100   005020                  725     					clr (r0)+
+006102   077102                  726     					sob r1, .-2
+006104   012700 010126           727     					mov #curr_suggestion, r0
+006110   013701 010040           728     					mov @#curr_max_size, r1
+006114   005020                  729     					clr (r0)+
+006116   077102                  730     					sob r1, .-2
+006120   012737 010052 010032    731     					mov #curr_word, @#curr_char_add
+006126   012601                  732     					mov (sp)+, r1
+006130   012600                  733     					mov (sp)+, r0
+006132   000207                  734     					rts pc
+                                 735     
+                                 736     ; parameter: none.
+                                 737     ; return value: none.
+                                 738     ; adds the current suggestion to the message, but not to the dictionary (because it already exists in there!)
+                                 739     ; linking register is pc.
+006134                           740     addNotDict:
+006134   010046                  741     					mov r0, -(sp)
+006136   010146                  742     					mov r1, -(sp)
+006140   004767 175250           743     					jsr pc, endLine
+006144   012700 010126           744     					mov #curr_suggestion, r0
+006150   013701 010040           745     					mov @#curr_max_size, r1
+006154   004767 177620           746     					jsr pc, concat2
+006160   012746 000047           747     					mov #'', -(sp)
+006164   004767 175206           748     					jsr pc, putChar
+006170   005726                  749     					tst (sp)+
+006172   010046                  750     					mov r0, -(sp)
+006174   004767 175136           751     					jsr pc, printSentence
+006200   005726                  752     					tst (sp)+
+006202   012746 011207           753     					mov #add_msg_str, -(sp)
+006206   004767 175124           754     					jsr pc, printSentence
+006212   005726                  755     					tst (sp)+
+006214   004767 175174           756     					jsr pc, endLine
+006220   004767 000424           757     					jsr pc, msgPrint
+006224   004767 177634           758     					jsr pc, clearWord
+006230   005237 010026           759     					inc @#dict_len
+006234   012601                  760     					mov (sp)+, r1
+006236   012600                  761     					mov (sp)+, r0
+006240   005337 010010           762     					dec @#msg_length
+006244   001405                  763     					beq end_not
+006246   004767 175202           764     					jsr pc, scanEnable
+006252   012737 000101 177560    765     					mov #101, @#TKS
+006260   000207                  766     end_not:				rts pc
+                                 767     	
+                                 768     
+                                 769     ; parameters: value in the stack to assign the result to, and addresses of two strings in the stack.
+                                 770     ; checks if the words are equal: exact same letters, size and order!
+                                 771     ; return value: 1 if the words are equal, and 0 otherwise.
+                                 772     ; linking register is pc
+006262                           773     wordsEqual:
+006262   010146                  774     					mov r1, -(sp)
+006264   010246                  775     					mov r2, -(sp)
+006266   016602 000006           776     					mov 6(sp), r2 					;word2
+006272   016601 000010           777     					mov 10(sp), r1					;word1
+006276   122122                  778     words1_equal:		cmpb (r1)+, (r2)+				;compares the letters pointed at in r3 and r4.
+006300   001401                  779     					beq words2_equal					;if they are equal check if they reached the last letter('@').
+006302   000405                  780     					br words3_equal					;if they are not equal end.
+006304   124127 000100           781     words2_equal:		cmpb -(r1), #'@					;compares the letter with '@' to see if we reached the end of the words. 
+006310   001410                  782     					beq words4_equal					;if we did end the function. the words are equal.
+006312   105721                  783     					tstb (r1)+						;return r1 to the valuen its suppose to be.
+006314   000770                  784     					br words1_equal					;loop back to check the next letters.
+006316   012602                  785     words3_equal:		mov (sp)+, r2					;pop the previous value of r2 to the register from the stack.
+006320   012601                  786     					mov (sp)+, r1					;pop the previous value of r1 to the register from the stack.
+006322   012766 000000 000006    787     					mov #0, 6(sp)					;moves 0 into the stack(ressembles false).
+006330   000207                  788     					rts pc 							;return false.		
+006332   012602                  789     words4_equal:		mov (sp)+, r2					;pop the previous value of r2 to the register from the stack.
+006334   012601                  790     					mov (sp)+, r1					;pop the previous value of r1 to the register from the stack.
+006336   012766 000001 000006    791     					mov #1, 6(sp)					;moves 1 into the stack(ressembles true).	
+006344   000207                  792     					rts pc 							;return true.
+                                 793     	
+                                 794     	
+                                 795     ; parameter: none.
+                                 796     ; return value: none.
+                                 797     ; adds the current word to the message and the dictionary!
+                                 798     ; linking register is pc.
+006346                           799     addToDict:
+006346   010046                  800     					mov r0, -(sp)
+006350   010146                  801     					mov r1, -(sp)
+006352   010246                  802     					mov r2, -(sp)
+006354   004767 175034           803     					jsr pc, endLine
+006360   012700 010052           804     					mov #curr_word, r0				; assign the to-be-added word address to r0
+006364   013701 010040           805     					mov @#curr_max_size, r1			; assign the maximum possible size of the word to r1
+006370   012702 012004           806     					mov #Dict, r2					; assign the dictionary's first node to r2
+006374                           807     lp_dict:			; check if the input word is already in the list before inserting it!
+006374   005746                  808     					tst -(sp)
+006376   010046                  809     					mov r0, -(sp)
+006400   011246                  810     					mov (r2), -(sp)
+006402   004767 177654           811     					jsr pc, wordsEqual				; enter the wordsEqual subroutine in ordre to check if the word in the current node in the dictionary and the word in r0 are equal
+006406   005726                  812     					tst (sp)+
+006410   005726                  813     					tst (sp)+
+006412   005726                  814     					tst (sp)+
+006414   001015                  815     					bne post_insert					; if the result isn't 0, it has to be 1 which means the words are equal, so skip inserting to the list!
+006416   016202 000002           816     					mov 2(r2), r2					; otherwise, try again with the next node
+006422   005712                  817     					tst (r2)						; if the next node holds an empty string: we're done, and the word isn't in the list
+006424   001363                  818     					bne lp_dict
+006426   012746 012004           819     					mov #Dict, -(sp)
+006432   010046                  820     					mov r0, -(sp)
+006434   004767 000114           821     					jsr pc, insertToList				; go to the insertToList subroutine in order to add the input word to the first available node in the list
+006440   005726                  822     					tst (sp)+
+006442   005726                  823     					tst (sp)+
+006444   005237 010026           824     					inc @#dict_len					; increase the dictionary's length by one!
+006450   004767 177240           825     post_insert:			jsr pc, concat					; add the current word to the message!
+006454   012746 000047           826     					mov #'', -(sp)
+006460   004767 174712           827     					jsr pc, putChar
+006464   005726                  828     					tst (sp)+
+006466   010046                  829     					mov r0, -(sp)
+006470   004767 174642           830     					jsr pc, printSentence
+006474   005726                  831     					tst (sp)+
+006476   012746 011207           832     					mov #add_msg_str, -(sp)
+006502   004767 174630           833     					jsr pc, printSentence
+006506   005726                  834     					tst (sp)+
+006510   004767 174700           835     					jsr pc, endLine
+006514   004767 000130           836     					jsr pc, msgPrint					; enter the msgPrint subroutine in order to display the strings regarding the accumulated message so far to the user
+006520   004767 177340           837     					jsr pc, clearWord				; enter the clearWord subroutine in order to clear the current word, after we've inserted it to the list
+006524   012602                  838     					mov (sp)+, r2
+006526   012601                  839     					mov (sp)+, r1
+006530   012600                  840     					mov (sp)+, r0
+006532   005337 010010           841     					dec @#msg_length					; since we've successfuly added a word to the message - decrease the message's amount of words left by one
+006536   001405                  842     					beq end_add						; if there are now 0 words left to write - skip to the end (do not enable keyboard interrupts!!)
+006540   004767 174710           843     					jsr pc, scanEnable
+006544   012737 000101 177560    844     					mov #101, @#TKS					; enable the keyboard apparatus to carry out interruptions
+006552   000207                  845     end_add:				rts pc
+                                 846     		
+                                 847     
+                                 848     ; parameters: address of the first node of the list and address of the word to be added to the list
+                                 849     ; finds the first node in the list that has an empty word as a value, and assigns the input word to be its value!
+                                 850     ; return value: none.
+                                 851     ; linking register is pc.
+006554                           852     insertToList:
+006554   010046                  853     					mov r0, -(sp)
+006556   010146                  854     					mov r1, -(sp)
+006560   010246                  855     					mov r2, -(sp)
+006562   016600 000010           856     					mov 10(sp), r0					; r0 holds the address of the first node in the list
+006566   016601 000012           857     					mov 12(sp), r1					; r1 holds the address of the word to be added to the list
+006572   127167 000000 171200    858     loop_nodes:			cmpb @(r1), 0
+006600   001407                  859     					beq loop_fill_node-2			; if the string inside the current node is the empty string 0 - stop iterating: we've found the node
+006602   127127 000000 000100    860     					cmpb @(r1), #'@
+006610   001403                  861     					beq loop_fill_node-2
+006612   016101 000002           862     					mov 2(r1), r1					; move the next node into r1
+006616   000765                  863     					br loop_nodes					; keep iterating over the list
+006620   011102                  864     					mov (r1), r2					; move the string inside this node to r2
+006622   121027 000100           865     loop_fill_node:		cmpb (r0), #'@
+006626   001402                  866     					beq done_insert					; if the current word is over: stop copying it
+006630   112022                  867     					movb (r0)+, (r2)+				; copy the current letter to be the current letter in the list's node's string, and advance both words to the next letter
+006632   000773                  868     					br loop_fill_node				; keep iterating until we've finished going through all the letters in the word
+006634   112712 000100           869     done_insert:			movb #'@, (r2)					; terminate the newly copied word
+006640   012602                  870     					mov (sp)+, r2
+006642   012601                  871     					mov (sp)+, r1
+006644   012600                  872     					mov (sp)+, r0
+006646   000207                  873     					rts pc	
+                                 874     	
+                                 875     
+                                 876     ; parameters: none.
+                                 877     ; prints the accumulated message so far as well as constant strings to the screen.
+                                 878     ; return value: none.
+                                 879     ; linking register is pc.
+006650                           880     msgPrint:
+006650   012746 011243           881     					mov #show1_msg_str, -(sp)
+006654   004767 174456           882     					jsr pc, printSentence
+006660   005726                  883     					tst (sp)+
+006662   012746 010202           884     					mov #message, -(sp)
+006666   004767 174444           885     					jsr pc, printSentence
+006672   005726                  886     					tst (sp)+
+006674   012746 011265           887     					mov #show2_msg_str, -(sp)
+006700   004767 174432           888     					jsr pc, printSentence
+006704   005726                  889     					tst (sp)+
+006706   004767 174502           890     					jsr pc, endLine
+006712   004767 000002           891     					jsr pc, printTime
+006716   000207                  892     					rts pc
+                                 893     
+                                 894     
+                                 895     ; parameters: none.
+                                 896     ; prints the amount of time left to write the message
+                                 897     ; return value: none.
+                                 898     ; linking register is pc.
+006720                           899     printTime:
+006720   012746 011434           900     					mov #time1_msg_str, -(sp)
+006724   004767 174406           901     					jsr pc, printSentence
+006730   005726                  902     					tst (sp)+
+006732   005737 010012           903     					tst @#msg_time
+006736   003006                  904     					bgt move_time
+006740   112746 000060           905     					movb #'0, -(sp)
+006744   004767 174426           906     					jsr pc, putChar
+006750   005726                  907     					tst (sp)+
+006752   000405                  908     					br moved_time
+006754   013746 010012           909     move_time:			mov @#msg_time, -(sp)
+006760   004767 000026           910     					jsr pc, toStringPrint
+006764   005726                  911     					tst (sp)+
+006766   012746 011450           912     moved_time:			mov #time2_msg_str, -(sp)
+006772   004767 174340           913     					jsr pc, printSentence
+006776   005726                  914     					tst (sp)+
+007000   004767 174410           915     					jsr pc, endLine
+007004   004767 174404           916     					jsr pc, endLine
+007010   000207                  917     					rts pc
+                                 918     								
+                                 919     ; parameters: some number in the stack
+                                 920     ; prints the number to the screen (converts to string)
+                                 921     ; return value: none.
+                                 922     ; linking register is pc.
+007012                           923     toStringPrint:
+007012   010046                  924     					mov r0, -(sp)
+007014   010146                  925     					mov r1, -(sp)
+007016   010246                  926     					mov r2, -(sp)
+007020   016600 000010           927     					mov 10(sp), r0					; move the number to be printed as a string into r0 
+007024   012702 010044           928     					mov #int_to_string_word, r2		; move the temporary string to gather the bytes' values into r2
+007030   005700                  929     loop_time:			tst r0
+007032   001412                  930     					beq end_to_string					; if r0 is 0 - skip to the end
+007034   110001                  931     					movb r0, r1						
+007036   042701 000370           932     					bic #370, r1					; r1 holds the value of the 3 smallest bits in the byte
+007042   062701 000060           933     					add #60, r1						; by adding 60 - we're left with a number between 60 and 67, reflecting '0 and '7 respectively in ascii value!
+007046   110122                  934     					movb r1, (r2)+					; move the character version of the number as a byte of r2 and advanced r2 to the next letter
+007050   006200                  935     					asr r0							
+007052   006200                  936     					asr r0
+007054   006200                  937     					asr r0							; divide r0 by 10 to get rid of the last digit before looping back
+007056   000764                  938     					br loop_time
+007060   112712 000100           939     end_to_string:		movb #'@, (r2)					; terminate r2
+007064   012702 010044           940     					mov #int_to_string_word, r2		; move r2 back to its start
+007070   010246                  941     					mov r2, -(sp)
+007072   004767 000030           942     					jsr pc, invertString				; enter the invertString subroutine to swap the letters of r2 (digits have been entered in reverse order)
+007076   005726                  943     					tst (sp)+
+007100   010246                  944     					mov r2, -(sp)
+007102   004767 174230           945     					jsr pc, printSentence				; enter the printSentence subroutine in order to print the number string in r2
+007106   005726                  946     					tst (sp)+
+007110   005022                  947     					clr (r2)+
+007112   005022                  948     					clr (r2)+
+007114   005022                  949     					clr (r2)+						; clear all the 3 words in r2 for later usage
+007116   012602                  950     					mov (sp)+, r2
+007120   012601                  951     					mov (sp)+, r1
+007122   012600                  952     					mov (sp)+, r0
+007124   000207                  953     					rts pc
+                                 954     					
+                                 955     ; parameters: address of a string
+                                 956     ; inverts the letters in the string. For example, dog -> god.
+                                 957     ; return value: none.
+                                 958     ; linking register is pc.			
+007126                           959     invertString:
+007126   010046                  960     					mov r0, -(sp)
+007130   010146                  961     					mov r1, -(sp)
+007132   016600 000006           962     					mov 6(sp), r0					; save the string address in r0
+007136   010001                  963     					mov r0, r1						; copy the string address into r1
+007140   122127 000100           964     loop_reach_end:		cmpb (r1)+, #'@
+007144   001401                  965     					beq invert-4						; when r1 is advanced to the end of the word - exit the loop
+007146   000774                  966     					br loop_reach_end				; advance r1 to point at the termiantor '@
+007150   005301                  967     					dec r1							; move r1 back to the terminator '@
+007152   005301                  968     					dec r1							; move r1 back to the letter before the terminator '@
+007154   020001                  969     invert:				cmp r0, r1
+007156   100007                  970     					bpl end_invert					; when r0 is equal to or bigger than r1 - end
+007160   111067 000622           971     					movb (r0), temp_char
+007164   111120                  972     					movb (r1), (r0)+
+007166   113711 010006           973     					movb @#temp_char, (r1)			; swap letters between r1 and r0 
+007172   005301                  974     					dec r1							; move r1 back to the previous letter
+007174   000767                  975     					br invert						; keep going until all letters in the string have been inverted
+007176   012601                  976     end_invert:			mov (sp)+, r1
+007200   012600                  977     					mov (sp)+, r0
+007202   000207                  978     					rts pc
+                                 979     			
+                                 980     								
+                                 981     	
+                                 982     ; When we enter this subroutine:	r0 - Target_string
+                                 983     ;									r1 - Target_prefix
+                                 984     ;									r2 - X (num of allowed mistakes)	
+                                 985     ; Return value: in-register. The regsiter is r1.
+                                 986     ; The subroutine returns 1 if Target_prefix is a prefix of Target_string, up to X mistakes (removal, addition or swapping characters), and 0 otherwise
+                                 987     ; Linking register is pc
+007204                           988     isPrefix:		
+007204   010046                  989     					mov r0, -(sp)				; pushing r0 into the stack as a parmeter to the auxIsPrefix function
+007206   010146                  990     					mov r1, -(sp)				; pushing r1 into the stack as a parmeter to the auxIsPrefix function
+007210   010246                  991     					mov r2, -(sp)				; pushing r2 into the stack as a parmeter to the auxIsPrefix function
+007212   004767 000022           992     					jsr pc, auxIsPrefix 			; enter the auxIsPrefix recursive fucntion
+007216   005726                  993     					tst (sp)+					; clearing the stack...
+007220   005726                  994     					tst (sp)+
+007222   005726                  995     					tst (sp)+
+007224   013766 010014 000002    996     					mov @#out_is_prefix, 2(sp)	; assign the result of auxIsPrefix as a return value from the function
+007232   005037 010014           997     					clr @#out_is_prefix
+007236   000207                  998     					rts pc
+                                 999     					
+                                1000     					
+                                1001     					
+007240   005766 000002          1002     auxIsPrefix:			tst 2(sp)
+007244   100503                 1003     					bmi false_end_aux 			; stop condition: x<0. return false
+007246   127627 000004 000100   1004     					cmpb @4(sp), #'@
+007254   001507                 1005     					beq true_end_aux 			; stop condition: we've reached the end of the sentence. success! return true
+007256   127627 000006 000100   1006     					cmpb @6(sp), #'@
+007264   001512                 1007     					beq aux_f1 					; the sentence reached end of string before the prefix did: try to remove its last digits
+007266   127676 000004 000006   1008     					cmpb @4(sp), @6(sp)
+007274   001532                 1009     					beq aux_f2 					; no mistakes in this comparsion: both characters are identical. Advance the pointers and call the function again
+007276   005366 000002          1010     					dec 2(sp) 					; there is a mistake: decrement x
+007302   005266 000004          1011     					inc 4(sp) 					; try: remove one letter by incrementing the prefix pointer 
+007306   016646 000006          1012     					mov 6(sp), -(sp)			; push the values into the stack
+007312   016646 000006          1013     					mov 6(sp), -(sp)
+007316   016646 000006          1014     					mov 6(sp), -(sp)
+007322   004767 177712          1015     					jsr pc, auxIsPrefix			; call the function again with the changes
+007326   005726                 1016     					tst (sp)+					; pops the values out of the stack
+007330   005726                 1017     					tst (sp)+
+007332   005726                 1018     					tst (sp)+
+007334   026727 000454 000001   1019     					cmp out_is_prefix, #1
+007342   001462                 1020     					beq true2_end_aux				; if the return value is 1: return true.
+007344   005366 000004          1021     					dec 4(sp)					; undo [remove] changes!
+007350   005266 000006          1022     					inc 6(sp) 					; try: add one letter by incrementing the sentence pointer
+007354   016646 000006          1023     					mov 6(sp), -(sp)			; push the values into the stack
+007360   016646 000006          1024     					mov 6(sp), -(sp)
+007364   016646 000006          1025     					mov 6(sp), -(sp)
+007370   004767 177644          1026     					jsr pc, auxIsPrefix			; call the function again with the changes
+007374   005726                 1027     					tst (sp)+					; pops the values out of the stack
+007376   005726                 1028     					tst (sp)+
+007400   005726                 1029     					tst (sp)+
+007402   026727 000406 000001   1030     					cmp out_is_prefix, #1		
+007410   001437                 1031     					beq true2_end_aux				; if the return value is 1: return true.
+007412   005266 000004          1032     					inc 4(sp) 					; try: swap the letter by incrementing both the prefix and  sentence pointer (sentence pointer already advanced!)
+007416   016646 000006          1033     					mov 6(sp), -(sp)			; push the values into the stack
+007422   016646 000006          1034     					mov 6(sp), -(sp)
+007426   016646 000006          1035     					mov 6(sp), -(sp)
+007432   004767 177602          1036     					jsr pc, auxIsPrefix			; call the function again with the changes
+007436   005726                 1037     					tst (sp)+					; pops the values out of the stack
+007440   005726                 1038     					tst (sp)+
+007442   005726                 1039     					tst (sp)+
+007444   026727 000344 000001   1040     					cmp out_is_prefix, #1
+007452   001416                 1041     					beq true2_end_aux				; if the return value is 1: return true.
+                                1042     					; nothing works! return false
+007454   023727 010014 000001   1043     false_end_aux:		cmp @#out_is_prefix, #1
+007462   001412                 1044     					beq true2_end_aux
+007464   012767 000000 000322   1045     					mov #0, out_is_prefix			; return value is 0 (false)
+007472   000207                 1046     					rts pc
+007474   005766 000002          1047     true_end_aux:		tst 2(sp)
+007500   001003                 1048     					bne true2_end_aux				; not a perfect X-mistake word: return false
+007502   012767 000001 000304   1049     					mov #1, out_is_prefix			; return value is 1 (true)
+007510   000207                 1050     true2_end_aux:		rts pc
+                                1051     
+007512                          1052     aux_f1:				; we get here if the sentence pointer reached the end and the prefix pointer did not
+007512   005366 000002          1053     					dec 2(sp)					; decrement X (this is an error)
+007516   005266 000004          1054     					inc 4(sp)					; increment the prefix pointer - "remove"
+007522   016646 000006          1055     					mov 6(sp), -(sp)			; push the values into the stack
+007526   016646 000006          1056     					mov 6(sp), -(sp)
+007532   016646 000006          1057     					mov 6(sp), -(sp)
+007536   004767 177476          1058     					jsr pc, auxIsPrefix			; call the function again with the changes
+007542   005726                 1059     					tst (sp)+					; pops the values out of the stack
+007544   005726                 1060     					tst (sp)+
+007546   005726                 1061     					tst (sp)+
+007550   026727 000240 000001   1062     					cmp out_is_prefix, #1
+007556   001754                 1063     					beq true2_end_aux				; if the return value is 1: return true.
+007560   000207                 1064     					rts pc
+007562                          1065     aux_f2:				; we get here if the current character in the sentence and the prefix are identical: advance both words to the next letter
+007562   005266 000004          1066     					inc 4(sp)
+007566   005266 000006          1067     					inc 6(sp)
+                                1068     					; advanced the letters of both words. Go to the function again:
+007572   016646 000006          1069     					mov 6(sp), -(sp)			; push the values into the stack
+007576   016646 000006          1070     					mov 6(sp), -(sp)
+007602   016646 000006          1071     					mov 6(sp), -(sp)
+007606   004767 177426          1072     					jsr pc, auxIsPrefix			; call the function again with the changes
+007612   005726                 1073     					tst (sp)+					; pops the values out of the stack
+007614   005726                 1074     					tst (sp)+
+007616   005726                 1075     					tst (sp)+
+007620   026727 000170 000001   1076     					cmp out_is_prefix, #1
+007626   001730                 1077     					beq true2_end_aux				; if the return value is 1: return true.
+007630   000207                 1078     					rts pc		
+                                1079     
+                                1080     					
+                                1081     					
+007632                          1082     . = torg + 10000
+                                1083     
+010000      012                 1084     LF:					.byte 10.					; <LINE FEED> ascii value
+010001      015                 1085     CR:					.byte 13.					; <CARRIAGE RETURN> ascii value
+010002      010                 1086     backspace:			.byte 8. 					; <BACKSPACE> ascii value	
+010003      040                 1087     space:				.byte 32.					; <WHITESPACE> ascii value
+010004      041                 1088     exc_mark:			.byte 33.					; <EXCLAMATION MARK> ascii value
+010005      076                 1089     user_write:			.byte 62.					; '> ascii value
+010006      000                 1090     temp_char:			.byte 0
+010007      000                 1091     .even
+                                1092     
+010010   000000                 1093     msg_length:			.word 0						; the message's length is stored here
+010012   000000                 1094     msg_time:			.word 0						; the time for the message's construction is stored here				
+010014   000000                 1095     out_is_prefix: 		.word 0						; the return value of auxIsPrefix is stored here
+010016   000000                 1096     equal_result: 		.word 0						
+010020   000000                 1097     strp: 				.word 0						
+010022   000000                 1098     f2_len: 				.word 0						
+010024   000000                 1099     next_length:			.word 0						
+010026   000000                 1100     dict_len:			.word 0						; the dictionary's length is stored here
+010030   000000                 1101     flag_first_node:		.word 0						; a flag for RevBubble signaling whether or not we're at the first node of the list
+010032   010052                 1102     curr_char_add:		.word curr_word
+010034   010202                 1103     curr_msg_char_add:	.word message
+010036   000000                 1104     flag_suggest:		.word 0
+010040   000026                 1105     curr_max_size:		.word 26
+010042   000000                 1106     flag_dot:			.word 0
+                                1107     
+010044   000000 000000 000000   1108     int_to_string_word:	.blkw 3
+010052   000000 000000 000000   1109     curr_word:			.blkw 26
+010126   000000 000000 000000   1110     curr_suggestion:		.blkw 26
+010202   000000 000000 000000   1111     message:				.blkw 264					; the final message is stored here
+                                1112     
+                                1113     ; for convenience, all of the possible constant strings for display are stored here
+010752      120    154    145   1114     len_msg_str:			.ascii <Please enter length of the message:@>
+            141    163    145            
+            040    145    156            
+            164    145    162            
+            040    154    145            
+            156    147    164            
+            150    040    157            
+            146    040    164            
+            150    145    040            
+            155    145    163            
+            163    141    147            
+            145    072    100            
+011016      120    154    145   1115     secs_msg_str:		.ascii <Please enter number of seconds to finish the message:@>
+            141    163    145            
+            040    145    156            
+            164    145    162            
+            040    156    165            
+            155    142    145            
+            162    040    157            
+            146    040    163            
+            145    143    157            
+            156    144    163            
+            040    164    157            
+            040    146    151            
+            156    151    163            
+            150    040    164            
+            150    145    040            
+            155    145    163            
+            163    141    147            
+            145    072    100            
+011104      131    157    165   1116     start1_msg_str:		.ascii <You can start to write your message.@>
+            040    143    141            
+            156    040    163            
+            164    141    162            
+            164    040    164            
+            157    040    167            
+            162    151    164            
+            145    040    171            
+            157    165    162            
+            040    155    145            
+            163    163    141            
+            147    145    056            
+            100                          
+011151      104    157    156   1117     start2_msg_str:		.ascii <Don't worry we'll assist you!@>
+            047    164    040            
+            167    157    162            
+            162    171    040            
+            167    145    047            
+            154    154    040            
+            141    163    163            
+            151    163    164            
+            040    171    157            
+            165    041    100            
+011207      047    040    167   1118     add_msg_str:			.ascii <' was added to the message!@>
+            141    163    040            
+            141    144    144            
+            145    144    040            
+            164    157    040            
+            164    150    145            
+            040    155    145            
+            163    163    141            
+            147    145    041            
+            100                          
+011243      124    150    145   1119     show1_msg_str:		.ascii <The message is: "@>
+            040    155    145            
+            163    163    141            
+            147    145    040            
+            151    163    072            
+            040    042    100            
+011265      042    056    100   1120     show2_msg_str:		.ascii <".@>
+011270      123    157    162   1121     err_msg_str:			.ascii <Sorry '@>
+            162    171    040            
+            047    100                   
+011300      047    040    156   1122     err1_msg_str:		.ascii <' not in our dictionary!@>
+            157    164    040            
+            151    156    040            
+            157    165    162            
+            040    144    151            
+            143    164    151            
+            157    156    141            
+            162    171    041            
+            100                          
+011331      047    040    150   1123     err2_msg_str:		.ascii <' has no other suggestions in our dictionary!@>
+            141    163    040            
+            156    157    040            
+            157    164    150            
+            145    162    040            
+            163    165    147            
+            147    145    163            
+            164    151    157            
+            156    163    040            
+            151    156    040            
+            157    165    162            
+            040    144    151            
+            143    164    151            
+            157    156    141            
+            162    171    041            
+            100                          
+011407      104    157    040   1124     fix1_msg_str:		.ascii <Do you mean '@>
+            171    157    165            
+            040    155    145            
+            141    156    040            
+            047    100                   
+011425      047    040    171   1125     fix2_msg_str:		.ascii <' y/n?@>
+            057    156    077            
+            100                          
+011434      124    151    155   1126     time1_msg_str:		.ascii <Time left: @>
+            145    040    154            
+            145    146    164            
+            072    040    100            
+011450      040    163    145   1127     time2_msg_str:		.ascii < seconds@>
+            143    157    156            
+            144    163    100            
+011461      123    157    162   1128     times_up_msg_str:		.ascii <Sorry Time is up!@>
+            162    171    040            
+            124    151    155            
+            145    040    151            
+            163    040    165            
+            160    041    100            
+011503      124    150    141   1129     done1_msg_str:		.ascii <Thank you!@>
+            156    153    040            
+            171    157    165            
+            041    100                   
+011516      102    171    145   1130     done2_msg_str:		.ascii <Bye Bye!@>
+            040    102    171            
+            145    041    100            
+                                1131     
+011527      000                 1132     .even
+                                1133     
+                                1134     ; the Dict, X and rate labels will be entered below!
+                                1135     
+                                1136     
+011530                          1137     .=torg + 12000
+                                1138     
+012000   000001                 1139     X:				.word 1
+012002   001750                 1140     rate: .word 1000.
+012004                          1141     Dict:
+012004   012054 012010          1142     node1:		.word str1, node2
+012010   012057 012014          1143     node2:		.word str2, node3
+012014   012064 012020          1144     node3:		.word str3, node4
+012020   012071 012024          1145     node4:		.word str4, node5
+012024   012076 012030          1146     node5:		.word str5, node6
+012030   012104 012034          1147     node6:		.word str6, node7
+012034   012116 012040          1148     node7:		.word str7, node8
+012040   012130 012044          1149     node8:		.word str8, node9
+012044   012142 012050          1150     node9:		.word str9, node10
+012050   012154 000000          1151     node10:	.word str10, 0
+                                1152     
+012054      147    157    100   1153     str1:			.ascii	<go@>
+012057      150    157    157   1154     str2:			.ascii	<hook@>
+            153    100                   
+012064      162    157    142   1155     str3:			.ascii	<robe@>
+            145    100                   
+012071      162    157    157   1156     str4:			.ascii	<room@>
+            155    100                   
+012076      162    157    163   1157     str5:			.ascii	<rose@>
+            145    100                   
+012103      000                 1158     .even
+012104   000000 000000 000000   1159     str6:		.blkw 5
+012116   000000 000000 000000   1160     str7:		.blkw 5
+012130   000000 000000 000000   1161     str8:		.blkw 5
+012142   000000 000000 000000   1162     str9:		.blkw 5
+012154   000000 000000 000000   1163     str10:		.blkw 5
+                                1164     
+012166                          1165     ExpectedDict:
+012166   012236 012172          1166     _node1:		.word _str1, _node2
+012172   012240 012176          1167     _node2:		.word _str2, _node3
+012176   012242 012202          1168     _node3:		.word _str3, _node4
+012202   012247 012206          1169     _node4:		.word _str4, _node5
+012206   012253 012212          1170     _node5:		.word _str5, _node6
+012212   012256 012216          1171     _node6:		.word _str6, _node7
+012216   012263 012222          1172     _node7:		.word _str7, _node8
+012222   012270 012226          1173     _node8:		.word _str8, _node9
+012226   012275 012232          1174     _node9:		.word _str9, _node10
+012232   012302 000000          1175     _node10:	.word _str10, 0
+                                1176     
+012236      111    100          1177     _str1:		.ascii	<I@>
+012240      141    100          1178     _str2:		.ascii	<a@>
+012242      142    157    157   1179     _str3:		.ascii	<book@>
+            153    100                   
+012247      142    165    171   1180     _str4:		.ascii	<buy@>
+            100                          
+012253      147    157    100   1181     _str5:		.ascii	<go@>
+012256      150    157    157   1182     _str6:		.ascii	<hook@>
+            153    100                   
+012263      162    157    142   1183     _str7:		.ascii	<robe@>
+            145    100                   
+012270      162    157    157   1184     _str8:		.ascii	<room@>
+            155    100                   
+012275      162    157    163   1185     _str9:		.ascii	<rose@>
+            145    100                   
+012302      163    150    157   1186     _str10:		.ascii	<should@>
+            165    154    144            
+            100                          
+
+
+	S Y M B O L   T A B L E
+	=======================
+
+SYMBOL    VALUE   TYPE
+------    -----   ----
+TKS       177560  abs      
+TKB       177562  abs      
+TPS       177564  abs      
+TPB       177566  abs      
+CLS       177546  abs      
+IV_KEYBO  000060  abs      
+IV_CLOCK  000100  abs      
+main      003000  text     
+Dict      012004  text     
+dict_len  010026  text     
+dictCalc  004122  text     
+msgScan   004452  text     
+clock     003710  text     
+startGam  003214  text     
+rate      012002  text     
+scanEnab  003454  text     
+wait_sor  003104  text     
+check_ti  003124  text     
+RevBubbl  004206  text     
+msg_time  010012  text     
+check_am  003140  text     
+timesUp   003772  text     
+end_prog  003170  text     
+msg_leng  010010  text     
+check_do  003154  text     
+gameOver  003732  text     
+flag_dot  010042  text     
+complete  003210  text     
+len_msg_  010752  text     
+printSen  003336  text     
+endLine   003414  text     
+readInpu  003502  text     
+secs_msg  011016  text     
+start1_m  011104  text     
+start2_m  011151  text     
+lp_len_m  003344  text     
+end_len_  003364  text     
+putChar   003376  text     
+LF        010000  text     
+CR        010001  text     
+user_wri  010005  text     
+space     010003  text     
+loop_dig  003522  text     
+legal_pr  003560  text     
+backspac  010002  text     
+end_read  003642  text     
+add_digi  003622  text     
+removeLa  003662  text     
+tick_ok   003726  text     
+done1_ms  011503  text     
+gameResu  004032  text     
+times_up  011461  text     
+show1_ms  011243  text     
+message   010202  text     
+skip_msg  004064  text     
+show2_ms  011265  text     
+done2_ms  011516  text     
+lp_all_n  004130  text     
+dict_end  004202  text     
+flag_fir  010030  text     
+next_nod  004230  text     
+recursio  004262  text     
+bubble    004270  text     
+isLexiBi  004340  text     
+sorted    004336  text     
+swapAddr  004420  text     
+loop_lex  004360  text     
+end_lexi  004412  text     
+curr_cha  010032  text     
+end_scan  004654  text     
+chk_spac  004522  text     
+curr_wor  010052  text     
+chk_exc_  004544  text     
+addToDic  006346  text     
+exc_mark  010004  text     
+chk_dot   004566  text     
+suggestW  004670  text     
+valid_sc  004612  text     
+add_char  004646  text     
+X         012000  text     
+flag_sug  010036  text     
+loop_wor  004726  text     
+add_mist  005054  text     
+isPrefix  007204  text     
+try_next  005040  text     
+wordSugg  005254  text     
+end_sugg  005240  text     
+printTim  006720  text     
+err_msg_  011270  text     
+didnt_pi  005172  text     
+err1_msg  011300  text     
+err2_msg  011331  text     
+curr_sug  010126  text     
+loop_upd  005302  text     
+end_upda  005314  text     
+has_mist  005344  text     
+perfectP  005614  text     
+suggest_  005450  text     
+fix1_msg  011407  text     
+fix2_msg  011425  text     
+flickerP  005460  text     
+addNotDi  006134  text     
+loop_boo  005474  text     
+got_char  005534  text     
+chk_no    005554  text     
+end_flic  005610  text     
+chk_stop  005562  text     
+invalid_  005600  text     
+lp_last_  005632  text     
+end_perf  005710  text     
+concat    005714  text     
+curr_msg  010034  text     
+loop_con  005746  text     
+concat_e  005764  text     
+concat2   006000  text     
+lp2_conc  006032  text     
+concat2_  006050  text     
+clearWor  006064  text     
+curr_max  010040  text     
+add_msg_  011207  text     
+msgPrint  006650  text     
+end_not   006260  text     
+wordsEqu  006262  text     
+words1_e  006276  text     
+words2_e  006304  text     
+words3_e  006316  text     
+words4_e  006332  text     
+lp_dict   006374  text     
+post_ins  006450  text     
+insertTo  006554  text     
+end_add   006552  text     
+loop_nod  006572  text     
+loop_fil  006622  text     
+done_ins  006634  text     
+time1_ms  011434  text     
+move_tim  006754  text     
+moved_ti  006766  text     
+toString  007012  text     
+time2_ms  011450  text     
+int_to_s  010044  text     
+loop_tim  007030  text     
+end_to_s  007060  text     
+invertSt  007126  text     
+loop_rea  007140  text     
+invert    007154  text     
+end_inve  007176  text     
+temp_cha  010006  text     
+auxIsPre  007240  text     
+out_is_p  010014  text     
+false_en  007454  text     
+true_end  007474  text     
+aux_f1    007512  text     
+aux_f2    007562  text     
+true2_en  007510  text     
+equal_re  010016  text     
+strp      010020  text     
+f2_len    010022  text     
+next_len  010024  text     
+node1     012004  text     
+str1      012054  text     
+node2     012010  text     
+str2      012057  text     
+node3     012014  text     
+str3      012064  text     
+node4     012020  text     
+str4      012071  text     
+node5     012024  text     
+str5      012076  text     
+node6     012030  text     
+str6      012104  text     
+node7     012034  text     
+str7      012116  text     
+node8     012040  text     
+str8      012130  text     
+node9     012044  text     
+str9      012142  text     
+node10    012050  text     
+str10     012154  text     
+Expected  012166  text     
+_node1    012166  text     
+_str1     012236  text     
+_node2    012172  text     
+_str2     012240  text     
+_node3    012176  text     
+_str3     012242  text     
+_node4    012202  text     
+_str4     012247  text     
+_node5    012206  text     
+_str5     012253  text     
+_node6    012212  text     
+_str6     012256  text     
+_node7    012216  text     
+_str7     012263  text     
+_node8    012222  text     
+_str8     012270  text     
+_node9    012226  text     
+_str9     012275  text     
+_node10   012232  text     
+_str10    012302  text     

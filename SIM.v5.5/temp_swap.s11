@@ -1,0 +1,77 @@
+. = torg + 5000
+main:				
+					mov pc, sp
+					tst -(sp)
+					mov #word1, -(sp)
+					mov #word2, -(sp)
+					jsr pc, swapAddress
+					tst (sp)+
+					tst (sp)+
+					halt
+					
+		
+		
+		
+swapAddress:
+					mov r0, -(sp)
+					mov 4(sp), r0
+					mov 6(sp), @4(sp)
+					mov r0, @6(sp)
+					mov (sp)+, r0
+					rts pc
+					
+					
+	
+	
+. = torg + 6000
+word1:				.word 0.
+word2:				.word 0.
+
+
+
+
+
+
+
+
+
+
+
+
+
+RevBubble:
+					cmp 2(sp), @#last_dict_word_add
+					beq chk_last_node
+					mov 2(sp), -(sp)
+					jsr pc, RevBubble
+					tst (sp)+
+					br done
+chk_last_node:		mov r0, -(sp)
+					mov r1, -(sp)
+					mov r2, -(sp)
+					mov 10(sp), r0
+					cmpb @2(r0), 0
+					beq sorted
+					cmpb @2(r0), #'@
+					beq sorted
+					; there is a new node in the list. Let's put it in the right place:
+					mov 2(r0), r1					; r1 holds the address of the new node in the list
+					mov @#dict_len, r2				; r2 holds the length of the dictionary
+bubble:				tst -(sp)
+					mov r1, -(sp)
+					mov r0, -(sp)
+					jsr pc, isLexiBigger
+					tst (sp)+
+					tst (sp)+
+					tst (sp)+
+					beq sorted
+					mov r0, -(sp)
+					mov r1, -(sp)
+					jsr pc, swapAddress
+					tst (sp)+
+					tst (sp)+
+					sob r2, bubble
+sorted:				mov (sp)+, r2
+					mov (sp)+, r1
+					mov (sp)+, r0
+done:				rts pc

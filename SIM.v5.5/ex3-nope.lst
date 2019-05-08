@@ -1,0 +1,401 @@
+Technion Computer Science Department -- PDP/11 X-Assembler Version (5.5) AA.
+
+
+	S O U R C E    F I L E    :    ex3-nope.s11
+	===========================================
+
+000000                             1     .=torg+4000
+                                   2     
+004000   010746                    3     main: mov pc, -(sp) 	;init stack
+004002   012700 012016             4     	  mov #Sent, r0 	;put Sent address in r0
+004006   012701 012036             5     	  mov #Output, r1	;put Output address in r1
+004012   016702 006004             6     	  mov X, r2			;put X in r2
+004016   016703 006002             7     	  mov MaxLen, r3	;put MaxLen in r3
+004022   012704 012000             8     	  mov #Setmin, r4	;put Setmin in r4
+004026   016705 005772             9     	  mov MaxLen, r5    ;temp size for init Output 
+004032                            10     initLoop:				;init Output array to be the first string in the languege in size of r3.
+004032   005705                   11     				tst r5	;check if r5(temp_len of Output) is zero
+004034   001003                   12     				bne wordNotEmpty ;if r5 is not zero (Output is not empty) go to wordNotEmpty
+004036   112711 000100            13     				movb #'@, @r1	  ;if r5 is zero (Output should be the empty word "@")	
+004042   000460                   14     				br done				;we have Output-"@", go to done.
+004044   111411                   15     wordNotEmpty:	movb @r4, @r1		;r1 points to a letter in Output, so we make each Outputs' letters to be Setmin letter 
+004046   105721                   16     				tstb (r1)+			;r1 points to next letter
+004050   077310                   17     				sob r3, initLoop  	;loop r3 times over output letters.
+004052   010503                   18     	mov r5, r3		   ;reset r3 with his original size(brfore sob loop)
+004054   112711 000100            19     	movb #'@, @r1		;put in the last letter of output @
+                                  20     	
+004060   012701 012036            21     outputCheck:	mov #Output, r1		;reset r1 to be the first letter of Output
+004064   004767 000116            22     				jsr pc, isPrefix	  ;go to isPrefix function to check if Output valids.
+004070   005701                   23     				tst r1				  ;check r1's PSW
+004072   001420                   24     				beq nextWord		  ;if r1 is 0(the return from isPrefix) so current Output word is not good. go to nextWord
+004074   005746                   25     				tst -(sp)			  ;allocate place for result at the bottom of the stack.
+004076   012746 012004            26     				mov #Dict, -(sp)	  ;put Dict in the stack
+004102   016746 005706            27     				mov DictLen, -(sp)	  ;put DictLen in the stack
+004106   012746 012036            28     				mov #Output, -(sp)	  ;put Output in the stack
+004112   016746 005664            29     				mov Delim, -(sp)	  ;put Delim in the stack
+004116   004767 000536            30     				jsr pc, sentInDict    ;go to sentInDict funstion to check if Output valids.
+004122   022626                   31     				cmp (sp)+, (sp)+	  ;pop two first elements of stack
+004124   022626                   32     				cmp (sp)+, (sp)+  	  ;pop two first elements of stack
+004126   005726                   33     				tst (sp)+			  ;pop and test first element(result from sentInDict)
+004130   001401                   34     				beq nextWord		  ;if result is 0, so the current Output is not good. go to nextWord.
+004132   000424                   35     				br done				  ;if we reach here-> Output is valid .go to done
+                                  36     	
+004134   012746 012036            37     	nextWord:	mov #Output, -(sp)		;put Output addres in stack
+004140   010346                   38     				mov r3, -(sp)			;put len of Output in stack
+004142   004767 000326            39     				jsr pc, nextString		;go to nextString function that will change Output to be the next word in the language.
+004146   022626                   40     				cmp (sp)+, (sp)+		;pop 2 first elements of stack
+004150   010367 000006            41     				mov r3, length			;put in label length the value of r3
+004154   005746                   42     				tst -(sp)				;allocate place for result from isStart at the bottom of the stack
+004156   004567 000236            43     				jsr r5, isStart			;go to isStart to check if Output is not first of languege in r3 size. 
+004162   000000                   44     		length:	.blkw 1					;in line parameter (size of r3) to isStart function
+004164   012036                   45     				.word Output			;in line parameter (Outpus address) to isStart function.
+004166   005726                   46     				tst (sp)+				;pop head of stack.
+004170   001733                   47     				beq outputCheck			;if result from isStart (head Of Stack) is 0, so go to outputCheck 
+004172   012701 012036            48     				mov #Output, r1			;if result from isStart is 1, so Outpus is the first word in r3 size again
+004176   005303                   49     				dec r3					;to prevent repeat, we will decrease r3(size of Output)
+004200   010305                   50     				mov r3, r5				;move to temp r5 the original value of r3 
+004202   000713                   51     				br initLoop				;init Output with the first word in string in size of r5 size
+004204                            52     		done:   
+                                  53     		
+004204   000000                   54     			halt
+                                  55     			
+                                  56     			
+                                  57     			
+                                  58     ;isPrefix function checks if @prefiex is inital of @word with @X mistakes(such as adding, removing or replacing letters).
+                                  59     ;pc is the link register
+                                  60     ;param's:
+                                  61     		;@prefiex- passed to the funtion *in register* r1. passed by address.
+                                  62     		;@word- passed to the funtion *in register* r0. passed by address.
+                                  63     		;@X- passed to the funtion *in register* r2. passed by value.
+                                  64     ;return:
+                                  65     ;The function returns *in register*  r1 the value 1 if prefix is inital of word with X mistakes, and 0 otherwise.	  
+004206   010346                   66     isPrefix:		mov r3, -(sp)			;Push r3 old value to stack
+004210   010446                   67     				mov r4, -(sp)			;Push r4 old value to stack
+004212   010546                   68     				mov r5, -(sp)			;Push r5 old value to stack
+004214   010003                   69     				mov r0, r3				;put in r3 the address of first letter of word
+004216   010104                   70     				mov r1, r4				;put in r4 the address of first letter of prefix
+004220   010205                   71     				mov r2, r5				;put X in r5 - number of mistakes .
+004222   012746 000100            72     				mov #100, -(sp) 		;move value 100 to head of the stack - this is a flag so we can know that if the stack has this value in the head, so this is the first c
+004226   005001                   73     				clr r1					;Clear r1, where the result will be
+                                  74     			
+004230   005701                   75     	equalCheck:	tst r1					;check r1 PSW
+004232   001010                   76     				bne recursionEnd		;if r1 is 1, go to recursionEnd
+004234   121314                   77     				cmpb @r3, @r4			;if r1 is 0, compare prefix letter with word letter
+004236   001020                   78     				bne switchCheck			;if the letters are not the same, go to switchCheck
+004240   121327 000100            79     				cmpb @r3, #'@			;Check if the letters are the same, check if r3 is @ (both words ended) 
+004244   001402                   80     				beq matchFound			; if the letters are the same, so go to matchFound
+004246   122324                   81     				cmpb (r3)+, (r4)+		;if the word didnt end, increase word's letter and prefix's letter
+004250   000767                   82     				br equalCheck			;go to equalCheck
+004252   005201                   83     	matchFound:	inc r1					;if a match was found, so increase result value (r1) by 1
+004254   021627 000100            84     	recursionEnd:cmp (sp), #100			;if we find in the head of the stack the flag with value 100, so this is the first call of the function
+004260   001005                   85     				bne skip				;this is the first call of the functuion, go to skip
+004262   005726                   86     				tst (sp)+				;pop flag
+004264   012605                   87     				mov (sp)+, r5			;pop and remove old value of r5
+004266   012604                   88     				mov (sp)+, r4			;pop and remove old value of r4
+004270   012603                   89     				mov (sp)+, r3			;pop and remove old value of r3
+004272   000207                   90     				rts pc					;return from function
+004274   005205                   91     	skip:		inc r5					;increase r5??G?G?G?G?D?G??G?G??G?G
+004276   000207                   92     				rts pc					;return from function
+                                  93     			
+004300   121427 000100            94     	switchCheck:cmpb @r4, #'@			;check if prefix ended (@ letter)
+004304   001427                   95     				beq addingCheck			;if prefiex ended, go to addingCheck
+004306   005705                   96     				tst r5					;test r5
+004310   001761                   97     				beq recursionEnd		;if r5 is 0 (number of mistakes) go to recursionEnd
+004312   121327 000100            98     				cmpb @r3, #'@			;check word ended(@letter)
+004316   001410                   99     				beq removalCheck		;if word ended, go to removalCheck
+004320   005305                  100     				dec r5					;decrease r5(number of mistakes)
+004322   010346                  101     				mov r3, -(sp)			;push word to stack
+004324   010446                  102     				mov r4, -(sp)			;push prefiex to stack
+004326   122324                  103     				cmpb (r3)+, (r4)+		;increase word and prefiex to be the next letter in the strings.
+004330   004767 177674           104     				jsr pc, equalCheck		;go to equalCheck function(rexursive).
+004334   012604                  105     				mov (sp)+, r4			;pop and return old value of r4
+004336   012603                  106     				mov (sp)+, r3			;pop and return old value of r3
+004340   005701                  107     	removalCheck:tst r1					;check if the r1 result from equalCheck 
+004342   001344                  108     				bne recursionEnd		; if the result is 1 so go to recursionEnd
+004344   005305                  109     				dec r5					;if the result is 0, decrease r5
+004346   010346                  110     				mov r3, -(sp)			;push r3 to stack
+004350   010446                  111     				mov r4, -(sp)			;push r4 to stack
+004352   105724                  112     				tstb (r4)+				;increase r4 to be next letter in prefiex
+004354   004767 177650           113     				jsr pc, equalCheck		;go to equalCheck functuin
+004360   012604                  114     				mov (sp)+, r4			;pop and return r4 old value
+004362   012603                  115     				mov (sp)+, r3			;pop and return r3 old value
+004364   121327 000100           116     	addingCheck:cmpb @r3, #'@			;check if r3 ended(@ letter)
+004370   001731                  117     				beq recursionEnd		;if r3 ended so go to recursionEnd
+004372   005701                  118     				tst r1					;check r1 PSW
+004374   001327                  119     				bne recursionEnd		;if r1 is 1 go to recursionEnd
+004376   005305                  120     				dec r5					;if r1 is 0 so decrease r5
+004400   010346                  121     				mov r3, -(sp)			;push r3 to stack
+004402   010446                  122     				mov r4, -(sp)			;push r4 to stack
+004404   105723                  123     				tstb (r3)+				;increase r3 to be next letter in word
+004406   004767 177616           124     				jsr pc, equalCheck		; go to equalCheck rexursive function
+004412   012604                  125     				mov (sp)+, r4			;pop and return r4 old value
+004414   012603                  126     				mov (sp)+, r3			;pop and return r3 old value
+004416   000716                  127     				br recursionEnd			;branch to recursionEnd
+                                 128     				
+                                 129     				
+                                 130     ;isStart function checks if @str is the first lexicografic string in size @length in the language.
+                                 131     ;r5 is the link register
+                                 132     ;param's:
+                                 133     		;@str- passed to the funtion *in line*. passed by address.
+                                 134     		;@length passed to the function *in line*. passed by value.
+                                 135     		;@Setmin-local parameter. The first letter in the language. passed by value.
+                                 136     		;@Setmax-local parameter. The last letter in the language. passed by value.
+                                 137     		;@Delim-local parameter. The "buffer" letter.passed by value.
+                                 138     ;return:
+                                 139     ;The function returns *in stack* 1 if str is the first lexicografic string, and 0 otherwise.
+004420   010046                  140     isStart:	mov r0, -(sp)			;puts old value of r0 in the stack
+004422   010146                  141     			mov r1, -(sp)			;puts old value of r1 in the stack
+004424   010246                  142     			mov r2, -(sp)			;puts old value of r2 in the stack
+004426   012500                  143     			mov (r5)+, r0			;move first parametet @str to r0
+004430   012501                  144     			mov (r5)+, r1			;move second parametet @length to r1
+004432   012702 012000           145     			mov #Setmin, r2			;move Setmin letter to r2
+004436   005066 000010           146     			clr 10(sp)				;clear result(bottom of the stack)
+004442   121112                  147     checkMinLoop:	cmpb @r1, @r2		;compare r1(letter of str) and r2(first letter in language)
+004444   001007                  148     				bne fail			;if not equal, str is not the first lexicografic string, so we pass to fail label
+004446   105721                  149     				tstb (r1)+			;puts in r1 the next lettet to compare with r2
+004450   077004                  150     				sob	r0,checkMinLoop	;loop @length times- comparing each letter of str(in size length) with r2
+004452   121127 000100           151     				cmpb (r1), #'@		;check if letter in index length is @(each string need to end with @)
+004456   001002                  152     				bne fail			;if str is not end with @ so fail
+004460   005266 000010           153     				inc 10(sp)			;if it reach to this line so it didnt fail and str is the first lexicografic string, so inc result(10(sp))
+004464   012602                  154     	fail: 	mov (sp)+, r2			;pop r2 old value and returns to r2 it's previous value
+004466   012601                  155     			mov (sp)+, r1			;pop r1 old value and returns to r1 it's previous value
+004470   012600                  156     			mov (sp)+, r0			;pop r0 old value and returns to r0 it's previous value
+004472   000205                  157     			rts r5					;end functuion
+                                 158     			
+                                 159     			
+                                 160     			
+                                 161     			
+                                 162     ;nextString function change @str to be the next string according to the language order.
+                                 163     ;pc is the link register
+                                 164     ;param's:
+                                 165     		;@str- passed to the funtion *in stack*. passed by address.
+                                 166     		;@length passed to the function *in stack*. passed by value.
+                                 167     		;@Setmin-local parameter. The first letter in the language. passed by value.
+                                 168     		;@Setmax-local parameter. The last letter in the language. passed by value.
+                                 169     		;@Delim-local parameter. The "buffer" letter.passed by value.
+004474   010046                  170     nextString:		mov r0, -(sp)		;puts old value of r0 in the stack
+004476   010146                  171     				mov r1, -(sp)		;puts old value of r1 in the stack
+004500   010246                  172     				mov r2, -(sp)		;puts old value of r2 in the stack
+004502   010346                  173     				mov r3, -(sp)		;puts old value of r3 in the stack
+004504   010446                  174     				mov r4, -(sp)		;puts old value of r4 in the stack
+004506   016600 000014           175     				mov 14(sp), r0		;move str length to r0
+004512   016601 000016           176     				mov 16(sp), r1		;move str address to r1
+004516   012702 012002           177     				mov #Delim, r2		;move Delim to r2
+004522   012703 012000           178     				mov #Setmin, r3		;move Setmin to r3
+004526   012704 012001           179     				mov #Setmax, r4		;move Setmax to r4
+004532   005300                  180     				dec r0				;decrease r0 by 1
+004534   060001                  181     				add r0, r1			;puts in r1 the address of last letter in str(one letter before @)
+004536   121112                  182     	delimLoop:	cmpb @r1, @r2		;compare the last letter with the Delim letter
+004540   001007                  183     				bne checkIfMax		;if the last letter in str is not the Delim letter so we go to checkIfMax
+004542   111311                  184     				movb @r3, @r1		;if the last letter in str is Delim, so we replace the last letter with Setmin
+004544   105741                  185     				tstb -(r1)			;puts the  address of one before last letter of str in r1.
+004546   077005                  186     				sob r0, delimLoop	;loop length-1 times-so each time the Delim is a letter in str, the letter where delim was will become Setmin and a letter before it will
+004550   121112                  187     				cmpb @r1, @r2		;same procce with the first letter of str: if it is the delim puts the Setmin instead
+004552   001002                  188     				bne checkIfMax		;if letter of str is not the delim, so check if letter is Setmax, go to checkIfMax
+004554   111311                  189     				movb @r3, @r1		;if letter is Delim, so replace with Setmin.
+004556   000405                  190     				br quit				;finish change str, go to quit
+004560   121114                  191     	checkIfMax: cmpb @r1, @r4		;if the letter is not Delim, compare letter with Setmax
+004562   001002                  192     				bne normalLetter	;if letter is not Setmax, so go to normalLetter
+004564   111211                  193     				movb @r2, @r1		;if letter is Setmax, so replace it with Delim
+004566   000401                  194     				br quit				;finish change, go to quit
+004570   105211                  195     	normalLetter: incb @r1			;if it is not Delim and not Setmax, so increase the letter to be the next in the language.
+004572   012604                  196     		quit: 	mov (sp)+, r4		;pop r4 old value and returns to r4 it's previous value
+004574   012603                  197     				mov (sp)+, r3		;pop r3 old value and returns to r3 it's previous value
+004576   012602                  198     				mov (sp)+, r2		;pop r2 old value and returns to r2 it's previous value
+004600   012601                  199     				mov (sp)+, r1		;pop r1 old value and returns to r1 it's previous value
+004602   012600                  200     				mov (sp)+, r0		;pop r0 old value and returns to r0 it's previous value
+004604   000207                  201     				rts pc				;return from function
+                                 202     ;wordsEqual function checks if @str1 and @str2 are equal strings.
+                                 203     ;pc is the link register
+                                 204     ;param's:
+                                 205     		;@str1- passed to the funtion *in stack*. passed by address.
+                                 206     		;@str2 passed to the function *in stack*. passed by address.
+                                 207     ;return:
+                                 208     ;The function returns *in stack* 1 if the string are equal, and 0 otherwise.				
+004606   010046                  209     wordsEqual: 	mov r0, -(sp)		;puts old value of r0 in the stack		
+004610   010146                  210     				mov r1, -(sp)		;puts old value of r1 in the stack
+004612   016600 000006           211     				mov 6(sp), r0		;puts str1 address in r0
+004616   016601 000010           212     				mov 10(sp), r1		;puts str2 address in r1
+004622   005066 000012           213     				clr 12(sp)			;clear the result(bottom of the stack)
+004626   121011                  214     		loop:	cmpb @r0, @r1		;compare str1's letter and str2's letter
+004630   001010                  215     				bne end				;if the letters are not the same, so go to end
+004632   121027 000100           216     				cmpb @r0, #'@		;if the letters are the same, check if they reached their end(@)
+004636   001403                  217     				beq success			;if they reached their end and it didnt fail, so the strings are equals
+004640   105720                  218     				tstb (r0)+			;increase letter of str1
+004642   105721                  219     				tstb (r1)+			;increase letter if str2
+004644   000770                  220     				br loop				;the string didnt end yet, so continue checking if next letters are the same
+                                 221     		
+004646   005266 000012           222     	success:	inc 12(sp)			;in case of succes , increase 12(sp) the result(bottom if the stack)
+004652   012601                  223     		end:	mov (sp)+, r1		;pop r1 old value and returns to r1 it's previous value
+004654   012600                  224     				mov (sp)+, r0		;pop r0 old value and returns to r0 it's previous value
+004656   000207                  225     				rts pc				;return from function
+                                 226     				
+                                 227     ;sentInDict function checks if @sent is a legal sentence according to the language and the rules for valid sentence.
+                                 228     ;pc is the link register
+                                 229     ;param's:
+                                 230     		;@dict- passed to the funtion *in stack*. passed by address.
+                                 231     		;@dict_length passed to the function *in stack*. passed by value.
+                                 232     		;@sent- passed to the function *in stack*.the sentence for check. passed by address.
+                                 233     		;@Delim-passed to the function *in stack*. The "buffer" letter.passed by value.
+                                 234     ;return:
+                                 235     ;The function returns *in stack* 1 if sent is valid , and 0 otherwise.				
+004660   010046                  236     sentInDict:				mov r0, -(sp) 				;puts old value of r0 in the stack
+004662   010146                  237     						mov r1, -(sp)				;puts old value of r1 in the stack
+004664   010246                  238     						mov r2, -(sp)				;puts old value of r2 in the stack
+004666   010346                  239     						mov r3, -(sp)				;puts old value of r3 in the stack
+004670   010446                  240     						mov r4, -(sp)				;puts old value of r4 in the stack
+004672   010546                  241     						mov r5, -(sp)				;puts old value of r5 in the stack
+004674   016600 000024           242     						mov 24(sp), r0				;puts dict address in r0
+004700   016601 000022           243     						mov 22(sp), r1				;puts dict length value in r1				
+004704   016602 000020           244     						mov 20(sp), r2				;puts sent address in r0
+004710   005003                  245     						clr r3						;clear r3 which will use to count the current checked word in sent
+004712   016604 000016           246     						mov 16(sp), r4				;puts Delim letter in r4
+004716   005066 000026           247     						clr 26(sp)					;clear the result (bottom of the stack)
+004722   005005                  248     						clr r5						;clear r5 which will be use as a flag to state if we reached the end of the sentence(1 if it is,else 0).
+004724   121204                  249     						cmpb @r2, r4				;compare sent's letter with Delim
+004726   001006                  250     						bne wordLoop				;if the letter is not Delim go to wordLoop
+004730   105722                  251     	startWithDelim:		tstb (r2)+					;if the letter is Delim, put in r2 the next letter
+004732   121204                  252     						cmpb @r2, r4				;compare r2 with Delim
+004734   001775                  253     						beq startWithDelim			;if the letter is equal to Delim, go to startWithDelim again until you find a letter that is not Delim
+                                 254     						
+004736   121227 000100           255     			endOfWord:	cmpb @r2, #'@				;check if the sent ends (the letter of sent equals to @)
+004742   001452                  256     						beq doneWithSucess			;if the sent ends go to doneWithSuccess
+004744   121227 000100           257     			wordLoop:			cmpb (r2), #'@		;compare letter with @
+004750   001407                  258     								beq endOfSent		;if they are equal go to endOfSent
+004752   105722                  259     								tstb (r2)+			;put next letter of sent in r2
+004754   005203                  260     								inc r3				;increase r3(length of current word increased)
+004756   121204                  261     								cmpb @r2, r4		;compare r2 letter with Delim
+004760   001371                  262     								bne wordLoop		;if r2 is not Delim go to wordLoop
+004762   112712 000100           263     								movb #'@, @r2		;if r2 is Delim, the words ends and replace delim with @
+004766   000401                  264     								br chkSent			;go to chkSent
+004770   005205                  265     			endOfSent:			inc r5				;we reached to endOfSent, so change the flag to 1
+004772   160302                  266     			chkSent:			sub r3, r2			;r2 become the first letter of last word.
+004774   005746                  267     								tst -(sp)			;allocate a place on stack (for result from function(wordsEqual)
+004776   010246                  268     								mov r2, -(sp)		;put the current word in sent in the stack
+005000   012046                  269     					dictLoop:	mov (r0)+, -(sp)	;put the current word in dict(r0) in stack and move r0 to be next word in dict
+005002   004767 177600           270     								jsr pc, wordsEqual	;wordsEqual function, check if current word in sent and current word in dict are equals
+005006   005726                  271     								tst (sp)+			;pop head of the stack
+005010   005766 000002           272     								tst 2(sp)			;return value fromm wordsEqual
+005014   001010                  273     								bne goToNextWordInSent ;if the words are equal(result=1 -> z!=0), so to goToNextWordInSent
+005016   077110                  274     								sob r1, dictLoop	;loop dict_len times- go over all of the words in dict, and compare to current word in dict
+005020   060302                  275     								add r3, r2			;put the last letter of current word in r2
+005022   005705                  276     								tst r5				;check r5 PSW
+005024   001001                  277     								bne noNeedToChangeWord ; if r5 is 1, it means the sentence ended , go to noNeedToChangeWord.
+005026   110412                  278     								movb r4, @r2		   ;move Delim back to r2(r2 points to the last letter of current word)
+005030   005726                  279     		noNeedToChangeWord:		tst (sp)+			;pop head of stack, r2
+005032   005726                  280     								tst (sp)+			;pop head of stack the allocated space for wordsEqual
+005034   000417                  281     								br exit				;go to exit
+005036   060302                  282     		goToNextWordInSent:		add r3, r2			;if we find that the current word in sent exists in dict, so we put in r2 the letter after the @ of last word.
+005040   005705                  283     						tst r5						;check r5 PSW (r5 is flag indicates if the sentence ended).		
+005042   001001                  284     						bne continueWithoutChanging	; if r5 is 1, it means the sentence ended , go to continueWithoutChanging
+005044   110412                  285     						movb r4, @r2				;move Delim back to r2(r2 points to the last letter of current word)
+005046   022626                  286     continueWithoutChanging:cmp (sp)+, (sp)+			;pop head and next after head of stack
+005050   016600 000024           287     						mov 24(sp), r0				;reset r0 with dict address
+005054   016601 000022           288     						mov 22(sp), r1				;reset r1 with dict_len value
+005060   005003                  289     						clr r3						;clear r3-current size of word become 0
+005062   005705                  290     						tst r5						;check if r5>0- meaning we reached the end of sent and the sentence is legal
+005064   001001                  291     						bne doneWithSucess			;if r5!=0, so we reach the end of sent, so go to doneWithSuccess
+005066   000720                  292     						br startWithDelim			;if r5=0, so we need to check if there are more series of Delim letters, so go to startWithDelim
+005070   005266 000026           293     	doneWithSucess:	inc 26(sp)						;if the sent is legal, increase the result by 1
+005074   012605                  294     			exit:	mov (sp)+, r5					;pop r5 old value and returns to r5 it's previous value
+005076   012604                  295     					mov (sp)+, r4					;pop r4 old value and returns to r4 it's previous value
+005100   012603                  296     					mov (sp)+, r3					;pop r3 old value and returns to r3 it's previous value
+005102   012602                  297     					mov (sp)+, r2					;pop r2 old value and returns to r2 it's previous value
+005104   012601                  298     					mov (sp)+, r1					;pop r1 old value and returns to r1 it's previous value
+005106   012600                  299     					mov (sp)+, r0					;pop r0 old value and returns to r0 it's previous value
+005110   000207                  300     					rts pc							;return from function
+                                 301     
+                                 302     					
+005112                           303     .=torg+10000 
+010000   000000                  304     out_is_prefix: .word 0
+010002   000000                  305     equal_result: .word 0
+010004   000000                  306     strp: .word 0
+010006   000000                  307     f2_len: .word 0
+                                 308     ;length: .word 6
+                                 309     
+010010                           310     .= torg + 12000
+012000      101                  311     Setmin: .byte 'A
+012001      103                  312     Setmax: .byte 'C
+012002      040                  313     Delim: .byte ' ;this is a space
+012003      000                  314     .even
+012004   012026 012031 012033    315     Dict: .word word1, word2, word3, word4
+         012035                          
+012014   000004                  316     DictLen: .word 4
+012016      101    102    100    317     Sent: .ascii <AB@>
+012021      000                  318     .even
+012022   000004                  319     X: .word 4
+012024   000006                  320     MaxLen: .word 6
+012026      101    103    100    321     word1: .ascii <AC@>
+012031      102    100           322     word2: .ascii <B@>
+012033      103    100           323     word3: .ascii <C@>
+012035      100                  324     word4: .ascii <@>
+012036                           325     .even
+                                 326     
+012036   000000 000000 000000    327     Output: .blkw 40
+012136                           328     .even
+                                 329     
+                                 330     
+                                 331     	
+
+
+	S Y M B O L   T A B L E
+	=======================
+
+SYMBOL    VALUE   TYPE
+------    -----   ----
+main      004000  text     
+Sent      012016  text     
+Output    012036  text     
+X         012022  text     
+MaxLen    012024  text     
+Setmin    012000  text     
+initLoop  004032  text     
+wordNotE  004044  text     
+done      004204  text     
+outputCh  004060  text     
+isPrefix  004206  text     
+nextWord  004134  text     
+Dict      012004  text     
+DictLen   012014  text     
+Delim     012002  text     
+sentInDi  004660  text     
+nextStri  004474  text     
+length    004162  text     
+isStart   004420  text     
+equalChe  004230  text     
+recursio  004254  text     
+switchCh  004300  text     
+matchFou  004252  text     
+skip      004274  text     
+addingCh  004364  text     
+removalC  004340  text     
+checkMin  004442  text     
+fail      004464  text     
+Setmax    012001  text     
+delimLoo  004536  text     
+checkIfM  004560  text     
+quit      004572  text     
+normalLe  004570  text     
+wordsEqu  004606  text     
+loop      004626  text     
+end       004652  text     
+success   004646  text     
+wordLoop  004744  text     
+startWit  004730  text     
+endOfWor  004736  text     
+doneWith  005070  text     
+endOfSen  004770  text     
+chkSent   004772  text     
+dictLoop  005000  text     
+goToNext  005036  text     
+noNeedTo  005030  text     
+exit      005074  text     
+continue  005046  text     
+out_is_p  010000  text     
+equal_re  010002  text     
+strp      010004  text     
+f2_len    010006  text     
+word1     012026  text     
+word2     012031  text     
+word3     012033  text     
+word4     012035  text     

@@ -1,0 +1,106 @@
+Technion Computer Science Department -- PDP/11 X-Assembler Version (5.5) AA.
+
+
+	S O U R C E    F I L E    :    ex3-tapuah.s11
+	=============================================
+
+000000                             1     . = torg + 3000
+003000                             2     main:
+003000   010706                    3     	mov pc , sp
+003002   005746                    4     	tst -(sp)
+003004   004567 000026             5     	jsr r5 , isStart
+003010   000006                    6     	.word 6
+003012   010000                    7     	.word word1
+003014   012746 010000             8     	mov #word1 , -(sp)
+003020   016746 004770             9     	mov length , -(sp)
+003024   004767 000070            10     	jsr pc , nextString
+003030   005726                   11     	tst (sp)+
+003032   005726                   12     	tst (sp)+
+003034   000000                   13     	halt
+                                  14     	
+                                  15     	
+003036                            16     isStart:
+003036   012567 004750            17     	mov (r5)+ , f2_len
+003042   012567 004742            18     	mov (r5)+ , strp
+003046   010446                   19     	mov r4 , -(sp)
+003050   016704 004734            20     	mov strp , r4 
+003054                            21     loop_is_start:
+003054   005767 004732            22     	tst f2_len
+003060   001005                   23     	bne check_char
+003062   012604                   24     	mov (sp)+ , r4
+003064   005726                   25     	tst (sp)+
+003066   012746 000001            26     	mov #1 , -(sp)
+003072   000205                   27     	rts r5
+003074                            28     check_char:
+003074   005367 004712            29     	dec f2_len
+003100   122467 004712            30     	cmpb (r4)+ , Setmin
+003104   001763                   31     	beq loop_is_start
+003106   012604                   32     	mov (sp)+ , r4
+003110   005726                   33     	tst (sp)+
+003112   012746 000000            34     	mov #0 , -(sp)
+003116   000205                   35     	rts r5
+                                  36     	
+                                  37     	
+                                  38     
+003120                            39     nextString:
+003120   016667 000002 004666     40     	mov 2(sp) , length
+003126   010446                   41     	mov r4 , -(sp)
+003130   016604 000006            42     	mov 6(sp) , r4      
+003134   066704 004654            43     	add length , r4
+003140                            44     check_last:
+003140   124467 004654            45     	cmpb -(r4) , Setmax
+003144   001005                   46     	bne end1_next_string
+003146   116714 004650            47     	movb Delim , (r4)
+003152   005367 004636            48     	dec length
+003156   001370                   49     	bne check_last
+003160                            50     end1_next_string:
+003160   005767 004630            51     	tst length
+003164   001404                   52     	beq end3_next_string
+003166   121467 004630            53     	cmpb (r4), Delim
+003172   001403                   54     	beq end2_next_string
+003174   105214                   55     	incb (r4)
+003176                            56     end3_next_string:
+003176   012604                   57     	mov (sp)+ , r4
+003200   000207                   58     	rts pc
+003202                            59     end2_next_string:
+003202   116714 004610            60     	movb Setmin , (r4)
+003206   000773                   61     	br end3_next_string
+                                  62     	
+                                  63     	
+003210                            64     .=torg+10000
+010000      172    172    172     65     word1: .ascii <zzzzzz@>
+            172    172    172            
+            100                          
+010007      000                   66     .even
+010010   000000                   67     strp: .word 0
+010012   000000                   68     f2_len: .word 0
+010014   000006                   69     length: .word 6
+010016      141                   70     Setmin: .ascii <a>
+010017      000                   71     .even
+010020      172                   72     Setmax: .ascii <z>
+010021      000                   73     .even
+010022      040                   74     Delim: .ascii < >
+                                  75     	
+
+
+	S Y M B O L   T A B L E
+	=======================
+
+SYMBOL    VALUE   TYPE
+------    -----   ----
+main      003000  text     
+isStart   003036  text     
+word1     010000  text     
+length    010014  text     
+nextStri  003120  text     
+f2_len    010012  text     
+strp      010010  text     
+loop_is_  003054  text     
+check_ch  003074  text     
+Setmin    010016  text     
+check_la  003140  text     
+Setmax    010020  text     
+end1_nex  003160  text     
+Delim     010022  text     
+end3_nex  003176  text     
+end2_nex  003202  text     

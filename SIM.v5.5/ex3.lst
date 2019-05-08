@@ -1,0 +1,401 @@
+Technion Computer Science Department -- PDP/11 X-Assembler Version (5.5) AA.
+
+
+	S O U R C E    F I L E    :    ex3.s11
+	======================================
+
+000000                             1     . = torg + 5000
+005000                             2     main:				
+005000   010706                    3     					mov pc, sp
+005002   005746                    4     					tst -(sp) 					; initializing the stack pointer to its start (stack size is 5000 in octal)
+005004   012700 012016             5     					mov #Sent, r0  				; moving the address of the input sentence to r0
+005010   012701 012036             6     					mov #Output, r1 			; moving the address of the output (initially contains nothing), to r1
+005014   016702 005002             7     					mov X, r2 					; moving the amount of prefix mistakes to r2
+005020   016703 005000             8     					mov MaxLen, r3				; moving the desired maximum possible length of the output sentence to r3
+005024   010304                    9     					mov r3, r4 					; storing the maximum length value in r4 as well
+005026   022703 000000            10     					cmp #0, r3
+005032   001466                   11     					beq completed 				; the desired output sentence is of size 0 at maximum: leave it as is, and finish the program
+005034                            12     try_first_sent: 	; we initialize the output string to be the smallest one in lexiographic order (as defined in Setmin)
+005034   116721 004740            13     					movb Setmin, (r1)+ 			
+005040   077303                   14     					sob r3, try_first_sent
+                                  15     					; now, the output string is a composed of MaxLen amount of Setmin chars
+005042   010403                   16     					mov r4, r3 					; restore the previous length back to r3
+005044   112711 000100            17     					movb #'@, (r1) 				; we terminate the string wtih the '@ terminator
+005050   012701 012036            18     					mov #Output, r1				; move r1 back to the start of the output string
+005054   004767 000134            19     is_valid_output:	jsr pc, isPrefix			; enter the isPrefix function. The values of the registers are as requested for this function!
+005060   020127 000000            20     					cmp r1, #0					; the output of isPrefix is stored in r1
+005064   001422                   21     					beq try_next_word			; if sent is not a prefix of the current output sentence - try the next sentence
+005066   005746                   22     					tst -(sp)					; allocate room in the stack for the output of sentInDict
+005070   012746 012004            23     					mov #Dict, -(sp)			; push the address of the dictionary to the stack
+005074   016746 004714            24     					mov DictLen, -(sp)			; push the length of the dictionary to the stack
+005100   016746 004676            25     					mov Delim, -(sp)			; push the delimeter of the given language to the stack
+005104   012746 012036            26     					mov #Output, -(sp)			; push the composed output sentence to the stack
+005110   004767 000730            27     					jsr pc, sentInDict			; enter the sentInDict function. The stack contains all the necessary values and in the right order!
+005114   005726                   28     					tst (sp)+					; pop input values from the stack...
+005116   005726                   29     					tst (sp)+
+005120   005726                   30     					tst (sp)+
+005122   005726                   31     					tst (sp)+
+005124   022627 000001            32     					cmp (sp)+, #1				; pop the result of the function from the stack, and comparing it to 1
+005130   001427                   33     					beq completed				; if sentInDict returned 1 - then we have a sentence that Sent is a prefix of, and is a valid sentence in the alphabet!
+005132   012701 012036            34     try_next_word:		mov #Output, r1				; move r1 back to the start of the output sentence
+005136   010146                   35     					mov r1, -(sp)				; push r1 into the stack
+005140   010346                   36     					mov r3, -(sp)				; push the desired length of the string into the stack
+005142   004767 000532            37     					jsr pc, nextString			; enter the nextString function: the output sentence is moved to the next one in the alphabet, in lexiographic order
+005146   005726                   38     					tst (sp)+					; pop input values from the stack...
+005150   005726                   39     					tst (sp)+
+005152   010367 000006            40     					mov r3, length				; store the desired length of the output inside the local in-line variable length, for the function isStart
+005156   005746                   41     					tst -(sp)					; allocate room in the stack for the output of isStart
+005160   004567 000432            42     					jsr r5, isStart				; enter the isStart function, to check if we've made a full cyclic rotation over all the possible combinations of sentences of the curr
+005164   000000                   43     length:				.word 0
+005166   012036                   44     					.word Output				; inline variable for isStart: stores the address of Output
+005170   005726                   45     					tst (sp)+					; remove the return value of isStart from the stack
+005172   001730                   46     					beq is_valid_output			; if the return value is 0 - we haven't finished all the possible sentences' combinations of that length. Move on to the next one
+005174   012701 012036            47     					mov #Output, r1				; return value was 1 - so we finished rotating over all the possible combinations of that length and couldn't find a suitable completio
+005200   005303                   48     					dec r3 						; the desired size of the sentence is reduced by 1
+005202   002402                   49     					blt completed				; if we've reached a negative length (extreme, unlikely case) - then no matches are possible in the entire dictionary. Finish the program
+005204   010304                   50     					mov r3, r4					; override r4 as well with the new size
+005206   000712                   51     					br try_first_sent			; initialize Output to be the first lexiographic word of the new size, and repeat the process!
+005210   000000                   52     completed:			halt						; yay!
+005212   000000                   53     					.word 0						; placeholder value after the halt command
+                                  54     		
+                                  55     
+                                  56     
+                                  57     ; When we enter this function:	r0 - Sentence
+                                  58     ;								r1 - Prefix
+                                  59     ;								r2 - X	
+                                  60     ; Return value: in-register. The regsiter is r1.
+                                  61     ; The fucntion returns 1 if Prefix is a prefix of Sentence, up to X mistakes (removal, addition or swapping characters), and 0 otherwise
+                                  62     ; Linking register is pc
+005214                            63     isPrefix:		
+005214   010046                   64     					mov r0, -(sp)				; pushing r0 into the stack as a parmeter to the auxIsPrefix function
+005216   010146                   65     					mov r1, -(sp)				; pushing r1 into the stack as a parmeter to the auxIsPrefix function
+005220   010246                   66     					mov r2, -(sp)				; pushing r2 into the stack as a parmeter to the auxIsPrefix function
+005222   004767 000014            67     					jsr pc, auxIsPrefix 		; enter the auxIsPrefix recursive fucntion
+005226   005726                   68     					tst (sp)+					; clearing the stack...
+005230   005726                   69     					tst (sp)+
+005232   005726                   70     					tst (sp)+
+005234   016701 002540            71     					mov out_is_prefix, r1		; assign the result of auxIsPrefix into register r1
+005240   000207                   72     					rts pc
+005242   005766 000002            73     auxIsPrefix:		tst 2(sp)
+005246   100503                   74     					bmi false_end_aux 			; stop condition: x<0. return false
+005250   127627 000004 000100     75     					cmpb @4(sp), #'@
+005256   001503                   76     					beq true_end_aux 			; stop condition: we've reached the end of the sentence. success! return true
+005260   127627 000006 000100     77     					cmpb @6(sp), #'@
+005266   001503                   78     					beq aux_f1 					; the sentence reached end of string before the prefix did: try to remove its last digits
+005270   127676 000004 000006     79     					cmpb @4(sp), @6(sp)
+005276   001523                   80     					beq aux_f2 					; no mistakes in this comparsion: both characters are identical. Advance the pointers and call the function again
+005300   005366 000002            81     					dec 2(sp) 					; there is a mistake: decrement x
+005304   005266 000004            82     					inc 4(sp) 					; try: remove one letter by incrementing the prefix pointer 
+005310   016646 000006            83     					mov 6(sp), -(sp)			; push the values into the stack
+005314   016646 000006            84     					mov 6(sp), -(sp)
+005320   016646 000006            85     					mov 6(sp), -(sp)
+005324   004767 177712            86     					jsr pc, auxIsPrefix			; call the function again with the changes
+005330   005726                   87     					tst (sp)+					; pops the values out of the stack
+005332   005726                   88     					tst (sp)+
+005334   005726                   89     					tst (sp)+
+005336   026727 002436 000001     90     					cmp out_is_prefix, #1
+005344   001450                   91     					beq true_end_aux			; if the return value is 1: return true.
+005346   005366 000004            92     					dec 4(sp)					; undo [remove] changes!
+005352   005266 000006            93     					inc 6(sp) 					; try: add one letter by incrementing the sentence pointer
+005356   016646 000006            94     					mov 6(sp), -(sp)			; push the values into the stack
+005362   016646 000006            95     					mov 6(sp), -(sp)
+005366   016646 000006            96     					mov 6(sp), -(sp)
+005372   004767 177644            97     					jsr pc, auxIsPrefix			; call the function again with the changes
+005376   005726                   98     					tst (sp)+					; pops the values out of the stack
+005400   005726                   99     					tst (sp)+
+005402   005726                  100     					tst (sp)+
+005404   026727 002370 000001    101     					cmp out_is_prefix, #1		
+005412   001425                  102     					beq true_end_aux			; if the return value is 1: return true.
+005414   005266 000004           103     					inc 4(sp) 					; try: swap the letter by incrementing both the prefix and  sentence pointer (sentence pointer already advanced!)
+005420   016646 000006           104     					mov 6(sp), -(sp)			; push the values into the stack
+005424   016646 000006           105     					mov 6(sp), -(sp)
+005430   016646 000006           106     					mov 6(sp), -(sp)
+005434   004767 177602           107     					jsr pc, auxIsPrefix			; call the function again with the changes
+005440   005726                  108     					tst (sp)+					; pops the values out of the stack
+005442   005726                  109     					tst (sp)+
+005444   005726                  110     					tst (sp)+
+005446   026727 002326 000001    111     					cmp out_is_prefix, #1
+005454   001404                  112     					beq true_end_aux			; if the return value is 1: return true.
+                                 113     					; nothing works! return false
+005456   012767 000000 002314    114     false_end_aux:		mov #0, out_is_prefix		; return value is 0 (false)
+005464   000207                  115     					rts pc
+005466   012767 000001 002304    116     true_end_aux:		mov #1, out_is_prefix		; return value is 1 (true)
+005474   000207                  117     					rts pc
+005476                           118     aux_f1:				; we get here if the sentence pointer reached the end and the prefix pointer did not
+005476   005366 000002           119     					dec 2(sp)					; decrement X (this is an error)
+005502   005266 000004           120     					inc 4(sp)					; increment the prefix pointer - "remove"
+005506   016646 000006           121     					mov 6(sp), -(sp)			; push the values into the stack
+005512   016646 000006           122     					mov 6(sp), -(sp)
+005516   016646 000006           123     					mov 6(sp), -(sp)
+005522   004767 177514           124     					jsr pc, auxIsPrefix			; call the function again with the changes
+005526   005726                  125     					tst (sp)+					; pops the values out of the stack
+005530   005726                  126     					tst (sp)+
+005532   005726                  127     					tst (sp)+
+005534   026727 002240 000001    128     					cmp out_is_prefix, #1
+005542   001751                  129     					beq true_end_aux			; if the return value is 1: return true.
+005544   000207                  130     					rts pc
+005546                           131     aux_f2:				; we get here if the current character in the sentence and the prefix are identical: advance both words to the next letter
+005546   005266 000004           132     					inc 4(sp)
+005552   005266 000006           133     					inc 6(sp)
+                                 134     					; advanced the letters of both words. Go to the function again:
+005556   016646 000006           135     					mov 6(sp), -(sp)			; push the values into the stack
+005562   016646 000006           136     					mov 6(sp), -(sp)
+005566   016646 000006           137     					mov 6(sp), -(sp)
+005572   004767 177444           138     					jsr pc, auxIsPrefix			; call the function again with the changes
+005576   005726                  139     					tst (sp)+					; pops the values out of the stack
+005600   005726                  140     					tst (sp)+
+005602   005726                  141     					tst (sp)+
+005604   026727 002170 000001    142     					cmp out_is_prefix, #1
+005612   001725                  143     					beq true_end_aux			; if the return value is 1: return true.
+005614   000207                  144     					rts pc	
+                                 145     
+                                 146     
+                                 147     
+                                 148     
+                                 149     					
+                                 150     ;this function returns true if the string contains only the first letter.
+                                 151     ;1st inline parameter: length of the string
+                                 152     ;2nd inline parameter: address of the first character in the string
+                                 153     ;Push the previous values of the registers so the function can use these registers, and then restore their respective values.
+                                 154     ;Linking register is r5.
+005616                           155     isStart:
+005616   012567 002164           156     					mov (r5)+ , f2_len			;get the inline parameter of the length of the word.
+005622   012567 002156           157     					mov (r5)+ , strp			;get the inline parameter of the address of the first character in the string .
+005626   010446                  158     					mov r4 , -(sp)				;hold the previous value of the register r4, so the function can use it.
+005630   016704 002150           159     					mov strp , r4 				;r4 holds the address of the first character in the string.
+005634   005767 002146           160     loop_is_start:		tst f2_len					;the beginning of the loop. f2_len is the counter of the function.
+005640   001005                  161     					bne check_char				;if f2_len is not 0, there are still letters to check.
+005642   012604                  162     					mov (sp)+ , r4				;r4 gets it's previous value(conseration).
+005644   012766 000001 000002    163     					mov #1 , 2(sp)				;return true.the word is built onlyu from the first letter.
+005652   000205                  164     					rts r5						;return using r5.
+005654   005367 002126           165     check_char:			dec f2_len					;decrements the counter.
+005660   122467 004114           166     					cmpb (r4)+ , Setmin			;compares r4  with the first letter in the set.
+005664   001763                  167     					beq loop_is_start			;if it is the first letter in the set check the next letter.
+005666   012604                  168     					mov (sp)+ , r4				;pop the previous value of r4 from the stack and put it back into the register.
+005670   012766 000000 000002    169     					mov #0 , 2(sp)				;return 0(false).
+005676   000205                  170     					rts r5						;return using r5(inline function).
+                                 171     	
+                                 172     
+                                 173     ;this function increments the given string to the next one.	
+                                 174     ;this function gets its parameters from the stack and called using the stack.
+                                 175     ;Push the previous values of the registers so the function can use these registers, and then restore their respective values.
+                                 176     ;Linking register is pc.
+005700                           177     nextString:
+005700   010446                  178     					mov r4, -(sp)				
+005702   010346                  179     					mov r3, -(sp)
+005704   016603 000006           180     					mov 6(sp) , r3				;move the length parameter to r3.
+005710   016604 000010           181     					mov 10(sp) , r4      		;move the string pointer of the string to r4.
+005714   060304                  182     					add r3, r4					;add r3 and r4 to get the end of the word.
+005716                           183     chk_delim:							
+005716   124467 004060           184     					cmpb -(r4), Delim			;compares the letter with the Delimeter.
+005722   001004                  185     					bne chk_max					;if they are not equal skip the next lines and go to chk_max label.
+005724   116714 004050           186     					movb Setmin, (r4)			;moves setmin into the address r4 points at because the last letter is the Delimiter.
+005730   077306                  187     					sob r3, chk_delim			;decrement r3 and branch into check deliem to increment the next letter.
+005732   000407                  188     					br end_next_string			;if r3 is 0, this is the end of the word so branch into the end of the function.
+005734                           189     chk_max:
+005734   121467 004041           190     					cmpb (r4), Setmax			;compares the letter r4 points at with Setmax.
+005740   001003                  191     					bne not_edge_case			;if they are not equal skip the next lines and go to not_edge_case.
+005742   116714 004034           192     					movb Delim, (r4)			;moves the delimeter into the address r4 points at because the letter r4 points at is Setmax.
+005746   000401                  193     					br end_next_string			;end the function.
+005750                           194     not_edge_case:
+005750   105214                  195     					incb (r4)					;not an edge case.just increase the letter to the next one is the set.
+005752                           196     end_next_string:
+005752   012603                  197     					mov (sp)+, r3				;pop the previous value of r3 into the register.
+005754   012604                  198     					mov (sp)+, r4				;pop the previous value of r4 into the register.
+005756   000207                  199     					rts pc						;return.
+                                 200     
+                                 201     
+                                 202     ;check if the words are equal.
+                                 203     ;Push the previous values of the registers so the function can use these registers, and then restore their respective values.
+                                 204     ;Linking register is pc
+005760                           205     wordsEqual:
+005760   010146                  206     					mov r1, -(sp)
+005762   010246                  207     					mov r2, -(sp)
+005764   016602 000006           208     					mov 6(sp), r2 				;word2
+005770   016601 000010           209     					mov 10(sp), r1				;word1
+005774   122122                  210     words1_equal:		cmpb (r1)+, (r2)+			;compares the letters pointed at in r3 and r4.
+005776   001401                  211     					beq words2_equal			;if they are equal check if they reached the last letter('@').
+006000   000405                  212     					br words3_equal				;if they are not equal end.
+006002   124127 000100           213     words2_equal:		cmpb -(r1), #'@				;compares the letter with '@' to see if we reached the end of the words. 
+006006   001410                  214     					beq words4_equal			;if we did end the function. the words are equal.
+006010   105721                  215     					tstb (r1)+					;return r1 to the valuen its suppose to be.
+006012   000770                  216     					br words1_equal				;loop back to check the next letters.
+006014   012602                  217     words3_equal:		mov (sp)+, r2				;pop the previous value of r2 to the register from the stack.
+006016   012601                  218     					mov (sp)+, r1				;pop the previous value of r1 to the register from the stack.
+006020   012766 000000 000006    219     					mov #0, 6(sp)				;moves 0 into the stack(ressembles false).
+006026   000207                  220     					rts pc 						;return false.		
+006030   012602                  221     words4_equal:		mov (sp)+, r2				;pop the previous value of r2 to the register from the stack.
+006032   012601                  222     					mov (sp)+, r1				;pop the previous value of r1 to the register from the stack.
+006034   012766 000001 000006    223     					mov #1, 6(sp)				;moves 1 into the stack(ressembles true).	
+006042   000207                  224     					rts pc 						;return true.
+                                 225     
+                                 226     
+                                 227     ; gets the following input passed in the stack, by this order:
+                                 228     ; 1) address for the result to be assigned
+                                 229     ; 2) the dictionary's address
+                                 230     ; 3) the length of the dictionary (amount of entries in the dictionary)
+                                 231     ; 4) the alphabet's delimeter
+                                 232     ; 5) the Output sentence's address
+                                 233     ; returns 1 if the Output sentence is in the dictionary, and 0 otherwise
+                                 234     ; Linking register is pc
+006044                           235     sentInDict:
+                                 236     					; the following registers are being used. Push the previous values of the registers so the function can use these registers, and then restore their respec
+006044   010046                  237     					mov r0, -(sp) 
+006046   010146                  238     					mov r1, -(sp)
+006050   010246                  239     					mov r2, -(sp)
+006052   010346                  240     					mov r3, -(sp)
+006054   010446                  241     					mov r4, -(sp)
+006056   010546                  242     					mov r5, -(sp)
+006060   016600 000016           243     					mov 16(sp), r0 				; r0 holds the Output sentence address
+006064   016601 000024           244     					mov 24(sp), r1				; r1 holds the dictionary address
+006070   012702 000000           245     					mov #0, r2 					; r2 holds the length of the current word in the sentence being checked (initialized to 0)
+006074   016603 000022           246     					mov 22(sp), r3 				; r3 holds the length of the dictionary array
+006100   012704 000000           247     					mov #0, r4 					; r4 is 1 iff we've reached the last word in the sentence (initialized to 0)
+006104   116605 000020           248     					movb 20(sp), r5 			; r5 holds the alphabet's delimeter's ascii value
+006110   012766 000000 000026    249     					mov #0, 26(sp)				; initialize the result of the function (allocated in the stack) to be 0
+006116   121005                  250     					cmpb (r0), r5				
+006120   001006                  251     					bne word_loop				; if the first character is not the delimeter - move to word_loop
+006122   122005                  252     del_loop:			cmpb (r0)+, r5	
+006124   001776                  253     					beq del_loop				; if the character is the delimeter - keep moving forward in the sentence until we find a character that isn't
+006126   105740                  254     					tstb -(r0)					; move r0 back to point at the first character that isn't a delimeter character
+006130   121027 000100           255     check_end:			cmpb (r0), #'@
+006134   001461                  256     					beq sent_is_in 				; if we've reached the end of the sentence, then the sentence is in the dictionary: success! finish! yay!
+006136   121027 000100           257     word_loop:			cmpb (r0), #'@
+006142   001407                  258     					beq last_word				; we're checking the NEXT word in the sentence: if we've reached the end of the sentence here, then we're at the last word
+006144   005200                  259     					inc r0						; move r0 to the next character in the sentence
+006146   005202                  260     					inc r2						; increase the length of the current word being checked by 1
+006150   121005                  261     					cmpb (r0), r5
+006152   001371                  262     					bne word_loop				; if we haven't reached the delimeter yet - go back to the loop and keep going
+006154   112710 000100           263     					movb #'@, (r0) 				; replace the delimeter with the string terminator '@
+006160   000402                  264     					br check_word				; branch to check_word (check the validity of the current word)
+006162   012704 000001           265     last_word:			mov #1, r4 					; we've reached the last word in the sentence: activate r4
+006166   160200                  266     check_word: 		sub r2, r0 					; go back to the start of the last word (substract the length of the current word from the pointer)
+006170   005746                  267     					tst -(sp)					; allocate room in the stack for wordEqual
+006172   010046                  268     					mov r0, -(sp)				; push r0 (points at the current word in the Output sentence) to the stack
+006174   012146                  269     check_dict_word:	mov (r1)+, -(sp)			; push the current dictionary word to the stack
+006176   004767 177556           270     					jsr pc, wordsEqual			; enter the wordsEqual function. If the current word and the current dictionary word being checked are equal - the return value is 1
+006202   005726                  271     					tst(sp)+					; pop the current dictionary word from the stack
+006204   026627 000002 000001    272     					cmp 2(sp), #1				; check if the return value of wordsEqual was 1
+006212   001411                  273     					beq sent_next_word 			; we found a match! Moving on to the next word...
+006214   077311                  274     					sob r3, check_dict_word 	; no match: check the next word
+006216   060200                  275     					add r2, r0 					; move back to the following word in the sentence
+006220   020427 000001           276     					cmp r4, #1					
+006224   001401                  277     					beq end_of_sent				; if r4 is activated - move to the end of sent procedure
+006226   110510                  278     					movb r5, (r0)				; replace the current character with the delimeter (as it originally was!)	
+006230   005726                  279     end_of_sent:		tst (sp)+					; pop the current word from the stack
+006232   005726                  280     					tst (sp)+					; pop wordsEqual's result from the stack
+006234   000424                  281     					br end_sent_in_dict			; finish
+006236   060200                  282     sent_next_word:		add r2, r0					; move back to the following word in the sentence
+006240   020427 000001           283     					cmp r4, #1
+006244   001401                  284     					beq go_next_word			; branch (skip the next command) if we're at the last word in the sentence
+006246   110510                  285     					movb r5, (r0)				; replace the current character with the delimeter (as it originally was!)
+006250   005726                  286     go_next_word:		tst (sp)+					; pop the current word from the stack
+006252   005726                  287     					tst (sp)+					; pop wordsEqual's result from the stack
+006254   016601 000024           288     					mov 24(sp), r1				; initialize the dictionary back to its start
+006260   016603 000022           289     					mov 22(sp), r3				; initialize the dictionary's length back to its size
+006264   012702 000000           290     					mov #0, r2					; initialize the current word's length to 0
+006270   020427 000001           291     					cmp r4, #1
+006274   001401                  292     					beq sent_is_in				; if we've finished comparing all the words in the sentence - we're done! The sentence is valid!
+006276   000711                  293     					br del_loop					; there are more words to check: back to the start
+006300   012766 000001 000026    294     sent_is_in:			mov #1, 26(sp)				; the sentence is in the dictionary: assign 1 to be the result of the function!
+006306   012605                  295     end_sent_in_dict:	mov (sp)+, r5				; pop r5's previous value from the stack, and restore its value
+006310   012604                  296     					mov (sp)+, r4				; pop r4's previous value from the stack, and restore its value
+006312   012603                  297     					mov (sp)+, r3				; pop r3's previous value from the stack, and restore its value
+006314   012602                  298     					mov (sp)+, r2				; pop r2's previous value from the stack, and restore its value
+006316   012601                  299     					mov (sp)+, r1				; pop r1's previous value from the stack, and restore its value
+006320   012600                  300     					mov (sp)+, r0				; pop r0's previous value from the stack, and restore its value
+006322   000207                  301     					rts pc
+                                 302     
+                                 303     
+                                 304     
+006324                           305     .=torg+10000 
+010000   000000                  306     out_is_prefix: .word 0
+010002   000000                  307     equal_result: .word 0
+010004   000000                  308     strp: .word 0
+010006   000000                  309     f2_len: .word 0
+010010   000000                  310     next_length: .word 0
+                                 311     
+                                 312     
+                                 313     
+010012                           314     .= torg + 12000
+012000      101                  315     Setmin: .byte 'A
+012001      103                  316     Setmax: .byte 'C
+012002      040                  317     Delim: .byte ' ;this is a space
+012003      000                  318     .even
+012004   012026 012031 012033    319     Dict: .word word1, word2, word3, word4
+         012035                          
+012014   000004                  320     DictLen: .word 4
+012016      101    102    100    321     Sent: .ascii <AB@>
+012021      000                  322     .even
+012022   000004                  323     X: .word 4
+012024   000006                  324     MaxLen: .word 6
+012026      101    103    100    325     word1: .ascii <AC@>
+012031      102    100           326     word2: .ascii <B@>
+012033      103    100           327     word3: .ascii <C@>
+012035      100                  328     word4: .ascii <@>
+012036                           329     .even
+                                 330     
+012036   000000 000000 000000    331     Output: .blkw 40
+012136                           332     .even
+
+
+	S Y M B O L   T A B L E
+	=======================
+
+SYMBOL    VALUE   TYPE
+------    -----   ----
+main      005000  text     
+Sent      012016  text     
+Output    012036  text     
+X         012022  text     
+MaxLen    012024  text     
+complete  005210  text     
+try_firs  005034  text     
+Setmin    012000  text     
+is_valid  005054  text     
+isPrefix  005214  text     
+try_next  005132  text     
+Dict      012004  text     
+DictLen   012014  text     
+Delim     012002  text     
+sentInDi  006044  text     
+nextStri  005700  text     
+length    005164  text     
+isStart   005616  text     
+auxIsPre  005242  text     
+out_is_p  010000  text     
+false_en  005456  text     
+true_end  005466  text     
+aux_f1    005476  text     
+aux_f2    005546  text     
+f2_len    010006  text     
+strp      010004  text     
+loop_is_  005634  text     
+check_ch  005654  text     
+chk_deli  005716  text     
+chk_max   005734  text     
+end_next  005752  text     
+Setmax    012001  text     
+not_edge  005750  text     
+wordsEqu  005760  text     
+words1_e  005774  text     
+words2_e  006002  text     
+words3_e  006014  text     
+words4_e  006030  text     
+word_loo  006136  text     
+del_loop  006122  text     
+check_en  006130  text     
+sent_is_  006300  text     
+last_wor  006162  text     
+check_wo  006166  text     
+check_di  006174  text     
+sent_nex  006236  text     
+end_of_s  006230  text     
+end_sent  006306  text     
+go_next_  006250  text     
+equal_re  010002  text     
+next_len  010010  text     
+word1     012026  text     
+word2     012031  text     
+word3     012033  text     
+word4     012035  text     

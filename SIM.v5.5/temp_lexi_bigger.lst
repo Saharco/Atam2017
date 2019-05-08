@@ -1,0 +1,66 @@
+Technion Computer Science Department -- PDP/11 X-Assembler Version (5.5) AA.
+
+
+	S O U R C E    F I L E    :    temp_lexi_bigger.s11
+	===================================================
+
+000000                             1     . = torg + 5000
+005000                             2     main:				
+005000   010706                    3     					mov pc, sp
+005002   005746                    4     					tst -(sp)
+005004   012746 006000             5     					mov #word1, -(sp)
+005010   012746 006004             6     					mov #word2, -(sp)
+005014   004767 000010             7     					jsr pc, isLexiBigger
+005020   005726                    8     					tst (sp)+
+005022   005726                    9     					tst (sp)+
+005024   005726                   10     					tst (sp)+
+005026   000000                   11     					halt
+                                  12     					
+                                  13     		
+                                  14     		
+                                  15     		
+005030                            16     isLexiBigger:
+005030   010046                   17     					mov r0, -(sp)
+005032   010146                   18     					mov r1, -(sp)
+005034   016600 000010            19     					mov 10(sp), r0				; the address of the first string entered to the stack is stored in r0
+005040   016601 000006            20     					mov 6(sp), r1				; the address of the second string entered to the stack is stored in r1
+005044   005066 000012            21     					clr 12(sp)
+005050   121027 000100            22     loop_lexi:			cmpb (r0), #'@
+005054   001412                   23     					beq end_lexi					; if our first string reached its end - it's not bigger than the second string. Go to the end
+005056   121127 000100            24     					cmpb (r1), #'@
+005062   001405                   25     					beq end_lexi-4				; if our first string hasn't reached its end and the second one did - return 1, and then end
+005064   121011                   26     					cmpb (r0), (r1)
+005066   003003                   27     					bgt end_lexi-4				; if r1[current] > r2[current] - it's bigger than the seccond string, so return 1 and then end
+005070   122021                   28     					cmpb (r0)+, (r1)+			
+005072   002403                   29     					blt end_lexi					; if r1[current] < r2[current] - it's not bigger than the second string. Go to the end
+005074   000765                   30     					br loop_lexi				; the characters are equal - check the next ones
+005076   005266 000012            31     					inc 12(sp)					; the first string delivered to the stack is bigger - return 1
+005102   012601                   32     end_lexi:			mov (sp)+, r1
+005104   012600                   33     					mov (sp)+, r0
+005106   000207                   34     					rts pc
+                                  35     					
+                                  36     					
+                                  37     					
+                                  38     					
+                                  39     					
+                                  40     	
+                                  41     	
+005110                            42     . = torg + 6000
+006000      104    157    147     43     word1:				.ascii <Dog@>
+            100                          
+006004      110    145    154     44     word2:				.ascii <HelloDog@>
+            154    157    104            
+            157    147    100            
+
+
+	S Y M B O L   T A B L E
+	=======================
+
+SYMBOL    VALUE   TYPE
+------    -----   ----
+main      005000  text     
+word1     006000  text     
+word2     006004  text     
+isLexiBi  005030  text     
+loop_lex  005050  text     
+end_lexi  005102  text     

@@ -1,0 +1,41 @@
+Technion Computer Science Department -- PDP/11 X-Assembler Version (5.5) AA.
+
+
+	S O U R C E    F I L E    :    ex1.s11
+	======================================
+
+000000                             1     . = torg + 1000
+001000   016700 000034             2     main: mov lngth, r0 ;Initialize registers
+001004   012701 001042             3      mov #arr1, r1
+001010   012702 001056             4      mov #arr2, r2
+001014   012703 001072             5      mov #sum, r3
+001020   012704 001106             6      mov #diff, r4
+001024   011113                    7     loop: mov (r1), (r3) ;Read element from arr1
+001026   061223                    8      add (r2), (r3)+ ;Read element from arr2 and compute result into sum
+001030   012114                    9      mov (r1)+, (r4) ;Read element from arr1
+001032   162224                   10      sub (r2)+, (r4)+ ;Read element from arr2 and compute result into diff
+001034   077005                   11      sob r0, loop ;Go to next iteration
+001036   000000                   12      halt
+001040   000006                   13     lngth: .word 6
+001042   000022 000011 000020     14     arr1: .word 22, 11, 16., 14, 11, 200
+         000014 000011 000200            
+001056   000002 000011 000020     15     arr2: .word 2, 11, 20, 12, 7, 208
+         000012 000007 000210            
+001072   000000 000000 000000     16     sum: .blkw 6
+001106   000000 000000 000000     17     diff: .blkw 6
+001122                            18     . = torg + 2000
+002000   000000                   19      halt 
+
+
+	S Y M B O L   T A B L E
+	=======================
+
+SYMBOL    VALUE   TYPE
+------    -----   ----
+main      001000  text     
+lngth     001040  text     
+arr1      001042  text     
+arr2      001056  text     
+sum       001072  text     
+diff      001106  text     
+loop      001024  text     
