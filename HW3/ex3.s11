@@ -1,0 +1,310 @@
+. = torg + 5000
+main:				
+					mov pc, sp
+					tst -(sp) 					; initializing the stack pointer to its start (stack size is 5000 in octal)
+					mov #Sent, r0  				; moving the address of the input sentence to r0
+					mov #Output, r1 			; moving the address of the output (initially contains nothing), to r1
+					mov X, r2 					; moving the amount of prefix mistakes to r2
+					mov MaxLen, r3				; moving the desired maximum possible length of the output sentence to r3
+					mov r3, r4 					; storing the maximum length value in r4 as well
+					cmp #0, r3
+					beq completed 				; the desired output sentence is of size 0 at maximum: leave it as is, and finish the program
+try_first_sent: 	; we initialize the output string to be the smallest one in lexiographic order (as defined in Setmin)
+					movb Setmin, (r1)+ 			
+					sob r3, try_first_sent
+					; now, the output string is a composed of MaxLen amount of Setmin chars
+					mov r4, r3 					; restore the previous length back to r3
+					movb #'@, (r1) 				; we terminate the string wtih the '@ terminator
+					mov #Output, r1				; move r1 back to the start of the output string
+is_valid_output:	jsr pc, isPrefix			; enter the isPrefix function. The values of the registers are as requested for this function!
+					cmp r1, #0					; the output of isPrefix is stored in r1
+					beq try_next_word			; if sent is not a prefix of the current output sentence - try the next sentence
+					tst -(sp)					; allocate room in the stack for the output of sentInDict
+					mov #Dict, -(sp)			; push the address of the dictionary to the stack
+					mov DictLen, -(sp)			; push the length of the dictionary to the stack
+					mov Delim, -(sp)			; push the delimeter of the given language to the stack
+					mov #Output, -(sp)			; push the composed output sentence to the stack
+					jsr pc, sentInDict			; enter the sentInDict function. The stack contains all the necessary values and in the right order!
+					tst (sp)+					; pop input values from the stack...
+					tst (sp)+
+					tst (sp)+
+					tst (sp)+
+					cmp (sp)+, #1				; pop the result of the function from the stack, and comparing it to 1
+					beq completed				; if sentInDict returned 1 - then we have a sentence that Sent is a prefix of, and is a valid sentence in the alphabet!
+try_next_word:		mov #Output, r1				; move r1 back to the start of the output sentence
+					mov r1, -(sp)				; push r1 into the stack
+					mov r3, -(sp)				; push the desired length of the string into the stack
+					jsr pc, nextString			; enter the nextString function: the output sentence is moved to the next one in the alphabet, in lexiographic order
+					tst (sp)+					; pop input values from the stack...
+					tst (sp)+
+					mov r3, length				; store the desired length of the output inside the local in-line variable length, for the function isStart
+					tst -(sp)					; allocate room in the stack for the output of isStart
+					jsr r5, isStart				; enter the isStart function, to check if we've made a full cyclic rotation over all the possible combinations of sentences of the current length with the given alphabet 
+length:				.word 0
+					.word Output				; inline variable for isStart: stores the address of Output
+					tst (sp)+					; remove the return value of isStart from the stack
+					beq is_valid_output			; if the return value is 0 - we haven't finished all the possible sentences' combinations of that length. Move on to the next one
+					mov #Output, r1				; return value was 1 - so we finished rotating over all the possible combinations of that length and couldn't find a suitable completion to Sent. Trying a smaller sentence...
+					dec r3 						; the desired size of the sentence is reduced by 1
+					blt completed				; if we've reached a negative length (extreme, unlikely case) - then no matches are possible in the entire dictionary. Finish the program.
+					mov r3, r4					; override r4 as well with the new size
+					br try_first_sent			; initialize Output to be the first lexiographic word of the new size, and repeat the process!
+completed:			halt						; yay!
+					.word 0						; placeholder value after the halt command
+		
+
+
+; When we enter this function:	r0 - Sentence
+;								r1 - Prefix
+;								r2 - X	
+; Return value: in-register. The regsiter is r1.
+; The fucntion returns 1 if Prefix is a prefix of Sentence, up to X mistakes (removal, addition or swapping characters), and 0 otherwise
+; Linking register is pc
+isPrefix:		
+					mov r0, -(sp)				; pushing r0 into the stack as a parmeter to the auxIsPrefix function
+					mov r1, -(sp)				; pushing r1 into the stack as a parmeter to the auxIsPrefix function
+					mov r2, -(sp)				; pushing r2 into the stack as a parmeter to the auxIsPrefix function
+					jsr pc, auxIsPrefix 		; enter the auxIsPrefix recursive fucntion
+					tst (sp)+					; clearing the stack...
+					tst (sp)+
+					tst (sp)+
+					mov out_is_prefix, r1		; assign the result of auxIsPrefix into register r1
+					rts pc
+auxIsPrefix:		tst 2(sp)
+					bmi false_end_aux 			; stop condition: x<0. return false
+					cmpb @4(sp), #'@
+					beq true_end_aux 			; stop condition: we've reached the end of the sentence. success! return true
+					cmpb @6(sp), #'@
+					beq aux_f1 					; the sentence reached end of string before the prefix did: try to remove its last digits
+					cmpb @4(sp), @6(sp)
+					beq aux_f2 					; no mistakes in this comparsion: both characters are identical. Advance the pointers and call the function again
+					dec 2(sp) 					; there is a mistake: decrement x
+					inc 4(sp) 					; try: remove one letter by incrementing the prefix pointer 
+					mov 6(sp), -(sp)			; push the values into the stack
+					mov 6(sp), -(sp)
+					mov 6(sp), -(sp)
+					jsr pc, auxIsPrefix			; call the function again with the changes
+					tst (sp)+					; pops the values out of the stack
+					tst (sp)+
+					tst (sp)+
+					cmp out_is_prefix, #1
+					beq true_end_aux			; if the return value is 1: return true.
+					dec 4(sp)					; undo [remove] changes!
+					inc 6(sp) 					; try: add one letter by incrementing the sentence pointer
+					mov 6(sp), -(sp)			; push the values into the stack
+					mov 6(sp), -(sp)
+					mov 6(sp), -(sp)
+					jsr pc, auxIsPrefix			; call the function again with the changes
+					tst (sp)+					; pops the values out of the stack
+					tst (sp)+
+					tst (sp)+
+					cmp out_is_prefix, #1		
+					beq true_end_aux			; if the return value is 1: return true.
+					inc 4(sp) 					; try: swap the letter by incrementing both the prefix and  sentence pointer (sentence pointer already advanced!)
+					mov 6(sp), -(sp)			; push the values into the stack
+					mov 6(sp), -(sp)
+					mov 6(sp), -(sp)
+					jsr pc, auxIsPrefix			; call the function again with the changes
+					tst (sp)+					; pops the values out of the stack
+					tst (sp)+
+					tst (sp)+
+					cmp out_is_prefix, #1
+					beq true_end_aux			; if the return value is 1: return true.
+					; nothing works! return false
+false_end_aux:		mov #0, out_is_prefix		; return value is 0 (false)
+					rts pc
+true_end_aux:		mov #1, out_is_prefix		; return value is 1 (true)
+					rts pc
+aux_f1:				; we get here if the sentence pointer reached the end and the prefix pointer did not
+					dec 2(sp)					; decrement X (this is an error)
+					inc 4(sp)					; increment the prefix pointer - "remove"
+					mov 6(sp), -(sp)			; push the values into the stack
+					mov 6(sp), -(sp)
+					mov 6(sp), -(sp)
+					jsr pc, auxIsPrefix			; call the function again with the changes
+					tst (sp)+					; pops the values out of the stack
+					tst (sp)+
+					tst (sp)+
+					cmp out_is_prefix, #1
+					beq true_end_aux			; if the return value is 1: return true.
+					rts pc
+aux_f2:				; we get here if the current character in the sentence and the prefix are identical: advance both words to the next letter
+					inc 4(sp)
+					inc 6(sp)
+					; advanced the letters of both words. Go to the function again:
+					mov 6(sp), -(sp)			; push the values into the stack
+					mov 6(sp), -(sp)
+					mov 6(sp), -(sp)
+					jsr pc, auxIsPrefix			; call the function again with the changes
+					tst (sp)+					; pops the values out of the stack
+					tst (sp)+
+					tst (sp)+
+					cmp out_is_prefix, #1
+					beq true_end_aux			; if the return value is 1: return true.
+					rts pc	
+
+
+
+
+					
+;this function returns true if the string contains only the first letter.
+;1st inline parameter: length of the string
+;2nd inline parameter: address of the first character in the string
+;Push the previous values of the registers so the function can use these registers, and then restore their respective values.
+;Linking register is r5.
+isStart:
+					mov (r5)+ , f2_len			;get the inline parameter of the length of the word.
+					mov (r5)+ , strp			;get the inline parameter of the address of the first character in the string .
+					mov r4 , -(sp)				;hold the previous value of the register r4, so the function can use it.
+					mov strp , r4 				;r4 holds the address of the first character in the string.
+loop_is_start:		tst f2_len					;the beginning of the loop. f2_len is the counter of the function.
+					bne check_char				;if f2_len is not 0, there are still letters to check.
+					mov (sp)+ , r4				;r4 gets it's previous value(conseration).
+					mov #1 , 2(sp)				;return true.the word is built onlyu from the first letter.
+					rts r5						;return using r5.
+check_char:			dec f2_len					;decrements the counter.
+					cmpb (r4)+ , Setmin			;compares r4  with the first letter in the set.
+					beq loop_is_start			;if it is the first letter in the set check the next letter.
+					mov (sp)+ , r4				;pop the previous value of r4 from the stack and put it back into the register.
+					mov #0 , 2(sp)				;return 0(false).
+					rts r5						;return using r5(inline function).
+	
+
+;this function increments the given string to the next one.	
+;this function gets its parameters from the stack and called using the stack.
+;Push the previous values of the registers so the function can use these registers, and then restore their respective values.
+;Linking register is pc.
+nextString:
+					mov r4, -(sp)				
+					mov r3, -(sp)
+					mov 6(sp) , r3				;move the length parameter to r3.
+					mov 10(sp) , r4      		;move the string pointer of the string to r4.
+					add r3, r4					;add r3 and r4 to get the end of the word.
+chk_delim:							
+					cmpb -(r4), Delim			;compares the letter with the Delimeter.
+					bne chk_max					;if they are not equal skip the next lines and go to chk_max label.
+					movb Setmin, (r4)			;moves setmin into the address r4 points at because the last letter is the Delimiter.
+					sob r3, chk_delim			;decrement r3 and branch into check deliem to increment the next letter.
+					br end_next_string			;if r3 is 0, this is the end of the word so branch into the end of the function.
+chk_max:
+					cmpb (r4), Setmax			;compares the letter r4 points at with Setmax.
+					bne not_edge_case			;if they are not equal skip the next lines and go to not_edge_case.
+					movb Delim, (r4)			;moves the delimeter into the address r4 points at because the letter r4 points at is Setmax.
+					br end_next_string			;end the function.
+not_edge_case:
+					incb (r4)					;not an edge case.just increase the letter to the next one is the set.
+end_next_string:
+					mov (sp)+, r3				;pop the previous value of r3 into the register.
+					mov (sp)+, r4				;pop the previous value of r4 into the register.
+					rts pc						;return.
+
+
+;check if the words are equal.
+;Push the previous values of the registers so the function can use these registers, and then restore their respective values.
+;Linking register is pc
+wordsEqual:
+					mov r1, -(sp)
+					mov r2, -(sp)
+					mov 6(sp), r2 				;word2
+					mov 10(sp), r1				;word1
+words1_equal:		cmpb (r1)+, (r2)+			;compares the letters pointed at in r3 and r4.
+					beq words2_equal			;if they are equal check if they reached the last letter('@').
+					br words3_equal				;if they are not equal end.
+words2_equal:		cmpb -(r1), #'@				;compares the letter with '@' to see if we reached the end of the words. 
+					beq words4_equal			;if we did end the function. the words are equal.
+					tstb (r1)+					;return r1 to the valuen its suppose to be.
+					br words1_equal				;loop back to check the next letters.
+words3_equal:		mov (sp)+, r2				;pop the previous value of r2 to the register from the stack.
+					mov (sp)+, r1				;pop the previous value of r1 to the register from the stack.
+					mov #0, 6(sp)				;moves 0 into the stack(ressembles false).
+					rts pc 						;return false.		
+words4_equal:		mov (sp)+, r2				;pop the previous value of r2 to the register from the stack.
+					mov (sp)+, r1				;pop the previous value of r1 to the register from the stack.
+					mov #1, 6(sp)				;moves 1 into the stack(ressembles true).	
+					rts pc 						;return true.
+
+
+; gets the following input passed in the stack, by this order:
+; 1) address for the result to be assigned
+; 2) the dictionary's address
+; 3) the length of the dictionary (amount of entries in the dictionary)
+; 4) the alphabet's delimeter
+; 5) the Output sentence's address
+; returns 1 if the Output sentence is in the dictionary, and 0 otherwise
+; Linking register is pc
+sentInDict:
+					; the following registers are being used. Push the previous values of the registers so the function can use these registers, and then restore their respective values
+					mov r0, -(sp) 
+					mov r1, -(sp)
+					mov r2, -(sp)
+					mov r3, -(sp)
+					mov r4, -(sp)
+					mov r5, -(sp)
+					mov 16(sp), r0 				; r0 holds the Output sentence address
+					mov 24(sp), r1				; r1 holds the dictionary address
+					mov #0, r2 					; r2 holds the length of the current word in the sentence being checked (initialized to 0)
+					mov 22(sp), r3 				; r3 holds the length of the dictionary array
+					mov #0, r4 					; r4 is 1 iff we've reached the last word in the sentence (initialized to 0)
+					movb 20(sp), r5 			; r5 holds the alphabet's delimeter's ascii value
+					mov #0, 26(sp)				; initialize the result of the function (allocated in the stack) to be 0
+					cmpb (r0), r5				
+					bne word_loop				; if the first character is not the delimeter - move to word_loop
+del_loop:			cmpb (r0)+, r5	
+					beq del_loop				; if the character is the delimeter - keep moving forward in the sentence until we find a character that isn't
+					tstb -(r0)					; move r0 back to point at the first character that isn't a delimeter character
+check_end:			cmpb (r0), #'@
+					beq sent_is_in 				; if we've reached the end of the sentence, then the sentence is in the dictionary: success! finish! yay!
+word_loop:			cmpb (r0), #'@
+					beq last_word				; we're checking the NEXT word in the sentence: if we've reached the end of the sentence here, then we're at the last word
+					inc r0						; move r0 to the next character in the sentence
+					inc r2						; increase the length of the current word being checked by 1
+					cmpb (r0), r5
+					bne word_loop				; if we haven't reached the delimeter yet - go back to the loop and keep going
+					movb #'@, (r0) 				; replace the delimeter with the string terminator '@
+					br check_word				; branch to check_word (check the validity of the current word)
+last_word:			mov #1, r4 					; we've reached the last word in the sentence: activate r4
+check_word: 		sub r2, r0 					; go back to the start of the last word (substract the length of the current word from the pointer)
+					tst -(sp)					; allocate room in the stack for wordEqual
+					mov r0, -(sp)				; push r0 (points at the current word in the Output sentence) to the stack
+check_dict_word:	mov (r1)+, -(sp)			; push the current dictionary word to the stack
+					jsr pc, wordsEqual			; enter the wordsEqual function. If the current word and the current dictionary word being checked are equal - the return value is 1
+					tst(sp)+					; pop the current dictionary word from the stack
+					cmp 2(sp), #1				; check if the return value of wordsEqual was 1
+					beq sent_next_word 			; we found a match! Moving on to the next word...
+					sob r3, check_dict_word 	; no match: check the next word
+					add r2, r0 					; move back to the following word in the sentence
+					cmp r4, #1					
+					beq end_of_sent				; if r4 is activated - move to the end of sent procedure
+					movb r5, (r0)				; replace the current character with the delimeter (as it originally was!)	
+end_of_sent:		tst (sp)+					; pop the current word from the stack
+					tst (sp)+					; pop wordsEqual's result from the stack
+					br end_sent_in_dict			; finish
+sent_next_word:		add r2, r0					; move back to the following word in the sentence
+					cmp r4, #1
+					beq go_next_word			; branch (skip the next command) if we're at the last word in the sentence
+					movb r5, (r0)				; replace the current character with the delimeter (as it originally was!)
+go_next_word:		tst (sp)+					; pop the current word from the stack
+					tst (sp)+					; pop wordsEqual's result from the stack
+					mov 24(sp), r1				; initialize the dictionary back to its start
+					mov 22(sp), r3				; initialize the dictionary's length back to its size
+					mov #0, r2					; initialize the current word's length to 0
+					cmp r4, #1
+					beq sent_is_in				; if we've finished comparing all the words in the sentence - we're done! The sentence is valid!
+					br del_loop					; there are more words to check: back to the start
+sent_is_in:			mov #1, 26(sp)				; the sentence is in the dictionary: assign 1 to be the result of the function!
+end_sent_in_dict:	mov (sp)+, r5				; pop r5's previous value from the stack, and restore its value
+					mov (sp)+, r4				; pop r4's previous value from the stack, and restore its value
+					mov (sp)+, r3				; pop r3's previous value from the stack, and restore its value
+					mov (sp)+, r2				; pop r2's previous value from the stack, and restore its value
+					mov (sp)+, r1				; pop r1's previous value from the stack, and restore its value
+					mov (sp)+, r0				; pop r0's previous value from the stack, and restore its value
+					rts pc
+
+
+
+.=torg+10000 
+out_is_prefix: .word 0
+equal_result: .word 0
+strp: .word 0
+f2_len: .word 0
+next_length: .word 0

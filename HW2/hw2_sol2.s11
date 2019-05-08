@@ -1,0 +1,104 @@
+.=torg+1000
+main:		mov pc, sp
+			tst -(sp)
+			mov (strings_len), r1 ; input array length
+			mov strings, r5 ; iterator for input strings
+			mov dict, r4 ; iterator for dict strings
+max_string: .word
+			mov strings, max_string
+max_score:  .word 0
+curr_score: .word 0
+loop1:		mov (dict_len), r2 ; dictionary length
+			mov #0, (curr_score)
+loop2:		mov #0, r0 ; flag
+			mov r5, r3 ; points to the start of the input word
+			mov r3, -(sp)
+			mov r4, -(sp)
+			jsr pc, check_flawless
+			tst (sp)+
+			tst (sp)+
+			cmp #1, r0
+			beq match
+			mov r3, -(sp)
+			mov r4, -(sp)
+			jsr pc, check_addition
+			tst (sp)+
+			tst (sp)+
+			cmp #1, r0
+			beq match		
+			mov r3, -(sp)
+			mov r4, -(sp)
+			jsr pc, check_removal
+			tst (sp)+
+			tst (sp)+
+			cmp #1, r0
+			beq match		
+			mov r3, -(sp)
+			mov r4, -(sp)
+			jsr pc, check_swap
+			tst (sp)+
+			tst (sp)+
+			cmp #1, r0
+			beq match		
+inc_dict:	cmpb #'@, (r4)+
+			beq end_loop2
+			br inc_dict
+end_loop2:	sob r2, loop2
+			mov dict, r4
+			inc r3
+			mov r3, r5
+			sob r1, loop1
+match: 		cmpb #'@, (r3)+
+			bne match
+			dec (r3)
+			inc (curr_score) 	
+			cmp (curr_score), (max_score)
+			bgt set_max
+			br inc_dict	
+set_max:    mov (curr_score), max_score
+			mov r5, max_string
+			br inc_dict
+
+check_flaweless:	cmpb #'@, @4(sp)
+					bne not_end	
+					mov #1, r0
+					rts pc
+not_end:			cmpb (r3)+, (r4)+
+			
+check_addition: 	inc 4(sp)
+				
+			
+			
+			
+			
+		[ [s1] | s2 | s3 | .. | | | | sn ] 3  [3]
+		[ d1 | d2 | d3 | .. | | | | dk ] 5   [5]
+	  
+	  
+	  
+//------REJECTED------//
+	  mov pc, sp
+	  tst -(sp)
+
+			
+			
+			
+			
+		
+		cmpb (in_word)+, (dict_word)+
+		bnq section
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		loop3:		cmpb #'@, (r3)
+			beq match
+			cmpb (r3)+, (r4)+
+			beq loop3
