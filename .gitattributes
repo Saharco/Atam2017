@@ -1,2 +1,2 @@
 * linguist-vendored
-*.PDP11 Assembly linguist-vendored=false
+*.s11 linguist-vendored=false
